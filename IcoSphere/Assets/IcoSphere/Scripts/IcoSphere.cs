@@ -1,13 +1,15 @@
 using System;
 using System.Collections.Generic;
-using Unity.VisualScripting.Dependencies.Sqlite;
 using UnityEngine;
 
 // 参考: http://blog.andreaskahler.com/2009/06/creating-icosphere-mesh-in-code.html
 public class IcoSphere : MonoBehaviour {
     [SerializeField] private MeshFilter meshFilter;
     [SerializeField] private float radius = 1f;
-    [SerializeField, Range(0, 5)] private int recursion = 2; // 递归细分次数，越大面数越多
+
+    // 递归细分次数, 越大面数越多
+    // 注意: 迭代4的时候可能有些数据超过int值范围了, 所以面会崩
+    [SerializeField, Range(0, 3)] private int recursion = 2;
 
     readonly static float GOLDEN_RATIO = (1.0f + Mathf.Sqrt(5.0f)) * 0.5f;
 
@@ -20,6 +22,30 @@ public class IcoSphere : MonoBehaviour {
             this.v1 = v1;
             this.v2 = v2;
             this.v3 = v3;
+        }
+    }
+
+    private struct VertCache {
+        public int p1;
+        public int p2;
+        public int p3;
+        public int t1;
+        public int t2;
+
+        public VertCache(int p1, int p2, int t1, int t2) {
+            this.p1 = Mathf.Min(p1, p2);
+            this.p2 = Mathf.Max(p1, p2);
+            p3 = -1;
+            this.t1 = (p1 < p2) ? (t1) : (t2 - t1);
+            this.t2 = t2;
+        }
+
+        public VertCache(int p1, int p2, int p3) {
+            this.p1 = Mathf.Min(p1, p2, p3);
+            this.p3 = Mathf.Max(p1, p2, p3);
+            this.p2 = p1 ^ p2 ^ p3 ^ this.p1 ^ this.p3;
+            t1 = -1;
+            t2 = -1;
         }
     }
 
@@ -46,7 +72,6 @@ public class IcoSphere : MonoBehaviour {
             uvs.Add(SphereToUV(norm));
         }
 
-
         // create 20 triangles of the icosahedron
         List<Tri> faces = new() {
             new(0, 11, 5), new(0, 5, 1),  new(0, 1, 7),   new(0, 7, 10), new(0, 10, 11), // 5 faces around point 0
@@ -56,19 +81,39 @@ public class IcoSphere : MonoBehaviour {
         };
 
         // refine triangles
-        Dictionary<Int64, int> cache = new();
+        Dictionary<VertCache, int> cache = new();
         for (int i = 0; i < recursion; ++i) {
             List<Tri> faces2 = new();
             foreach (Tri tri in faces) {
-                // replace triangle by 4 triangles
-                int a = GetMidPoint(cache, verts, uvs, tri.v1, tri.v2);
-                int b = GetMidPoint(cache, verts, uvs, tri.v2, tri.v3);
-                int c = GetMidPoint(cache, verts, uvs, tri.v3, tri.v1);
+                int v1 = tri.v1;
+                int v2 = tri.v2;
+                int v3 = tri.v3;
 
-                faces2.Add(new(tri.v1, a, c));
-                faces2.Add(new(tri.v2, b, a));
-                faces2.Add(new(tri.v3, c, b));
-                faces2.Add(new(a, b, c));
+                // 生成 9 个小三角形
+                //        v1
+                //       / \
+                //     c2---a1
+                //     / \ / \
+                //   c1---o---a2
+                //   / \ / \ / \
+                // v3--b2---b1--v2
+                int a1 = GetSplitPoint(cache, verts, uvs, v1, v2, 1, 3);
+                int a2 = GetSplitPoint(cache, verts, uvs, v1, v2, 2, 3);
+                int b1 = GetSplitPoint(cache, verts, uvs, v2, v3, 1, 3);
+                int b2 = GetSplitPoint(cache, verts, uvs, v2, v3, 2, 3);
+                int c1 = GetSplitPoint(cache, verts, uvs, v3, v1, 1, 3);
+                int c2 = GetSplitPoint(cache, verts, uvs, v3, v1, 2, 3);
+                int o = GetTriMidPoint(cache, verts, uvs, v1, v2, v3);
+
+                faces2.Add(new(v1, a1, c2));
+                faces2.Add(new(c2, a1, o));
+                faces2.Add(new(a1, a2, o));
+                faces2.Add(new(c2, o, c1));
+                faces2.Add(new(o, b1, b2));
+                faces2.Add(new(o, a2, b1));
+                faces2.Add(new(c1, o, b2));
+                faces2.Add(new(a2, v2, b1));
+                faces2.Add(new(c1, b2, v3));
             }
             faces = faces2;
         }
@@ -98,14 +143,9 @@ public class IcoSphere : MonoBehaviour {
         meshFilter.mesh = mesh;
     }
 
-    // return index of point in the middle of p1 and p2
-    private int GetMidPoint(Dictionary<Int64, int> cache, List<Vector3> verts, List<Vector2> uvs, int p1, int p2) {
-        // first check if we have it already
-        bool firstIsSmaller = p1 < p2;
-        Int64 smallerIdx = firstIsSmaller ? p1 : p2;
-        Int64 greaterIdx = firstIsSmaller ? p2 : p1;
-        Int64 key = (smallerIdx << 32) + greaterIdx;
-
+    // 分割点为t1/t2
+    private int GetSplitPoint(Dictionary<VertCache, int> cache, List<Vector3> verts, List<Vector2> uvs, int p1, int p2, int t1, int t2) {
+        VertCache key = new VertCache(p1, p2, t1, t2);
         if (cache.TryGetValue(key, out int ret)) {
             return ret;
         }
@@ -113,11 +153,32 @@ public class IcoSphere : MonoBehaviour {
         // not in cache, calculate it
         Vector3 point1 = verts[p1];
         Vector3 point2 = verts[p2];
-        Vector3 mid = ((point1 + point2) * 0.5f).normalized;
+        Vector3 pointSplit = Vector3.Lerp(point1, point2, (t1 * 1.0f) / t2).normalized;
 
         // add vertex makes sure point is on unit sphere
-        verts.Add(mid);
-        uvs.Add(SphereToUV(mid));
+        verts.Add(pointSplit);
+        uvs.Add(SphereToUV(pointSplit));
+        int i = verts.Count - 1;
+
+        cache.Add(key, i);
+        return i;
+    }
+
+    private int GetTriMidPoint(Dictionary<VertCache, int> cache, List<Vector3> verts, List<Vector2> uvs, int p1, int p2, int p3) {
+        VertCache key = new VertCache(p1, p2, p3);
+        if (cache.TryGetValue(key, out int ret)) {
+            return ret;
+        }
+
+        // not in cache, calculate it
+        Vector3 point1 = verts[p1];
+        Vector3 point2 = verts[p2];
+        Vector3 point3 = verts[p3];
+        Vector3 pointSplit = ((point1 + point2 + point3) / 3.0f).normalized;
+
+        // add vertex makes sure point is on unit sphere
+        verts.Add(pointSplit);
+        uvs.Add(SphereToUV(pointSplit));
         int i = verts.Count - 1;
 
         cache.Add(key, i);
