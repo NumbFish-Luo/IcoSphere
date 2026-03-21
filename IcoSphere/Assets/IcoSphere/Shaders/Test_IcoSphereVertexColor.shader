@@ -61,14 +61,6 @@ Shader "Test/IcoSphereVertexColor" {
                 return o;
             }
 
-            uint IntToRandom(uint x, uint seed) {
-                uint hash = x * 0x9e3779b9u + seed;
-                hash = (hash ^ (hash >> 15)) * 0x85ebca6bu;
-                hash = (hash ^ (hash >> 13)) * 0xc2b2ae35u;
-                hash = hash ^ (hash >> 16);
-                return hash & 0xFF;
-            }
-
             half4 frag(Varyings i) : SV_Target {
                 half4 albedo = SAMPLE_TEXTURE2D(_BaseMap, sampler_BaseMap, i.uv) * _BaseColor;
 
