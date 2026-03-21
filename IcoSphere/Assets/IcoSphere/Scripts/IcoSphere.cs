@@ -66,10 +66,12 @@ public class IcoSphere : MonoBehaviour {
             new( t,  0, -1), new(t, 0, 1), new(-t,  0, -1), new(-t,  0,  1)
         };
         List<Vector2> uvs = new();
+        List<Color> cols = new();
         for (int i = 0; i < verts.Count; i++) {
             Vector3 norm = verts[i].normalized;
             verts[i] = norm;
             uvs.Add(SphereToUV(norm));
+            cols.Add(Color.white);
         }
 
         // create 20 triangles of the icosahedron
@@ -82,6 +84,8 @@ public class IcoSphere : MonoBehaviour {
 
         // refine triangles
         Dictionary<VertCache, int> cache = new();
+        Color colOther = Color.clear;
+        Color colCenter = Color.white * 0.5f;
         for (int i = 0; i < recursion; ++i) {
             List<Tri> faces2 = new();
             foreach (Tri tri in faces) {
@@ -89,7 +93,7 @@ public class IcoSphere : MonoBehaviour {
                 int v2 = tri.v2;
                 int v3 = tri.v3;
 
-                // 生成 9 个小三角形
+                // 生成9个小三角形
                 //        v1
                 //       / \
                 //     c2---a1
@@ -97,13 +101,13 @@ public class IcoSphere : MonoBehaviour {
                 //   c1---o---a2
                 //   / \ / \ / \
                 // v3--b2---b1--v2
-                int a1 = GetSplitPoint(cache, verts, uvs, v1, v2, 1, 3);
-                int a2 = GetSplitPoint(cache, verts, uvs, v1, v2, 2, 3);
-                int b1 = GetSplitPoint(cache, verts, uvs, v2, v3, 1, 3);
-                int b2 = GetSplitPoint(cache, verts, uvs, v2, v3, 2, 3);
-                int c1 = GetSplitPoint(cache, verts, uvs, v3, v1, 1, 3);
-                int c2 = GetSplitPoint(cache, verts, uvs, v3, v1, 2, 3);
-                int o = GetTriMidPoint(cache, verts, uvs, v1, v2, v3);
+                int a1 = GetSplitPoint(cache, verts, uvs, cols, v1, v2, 1, 3, colOther, false);
+                int a2 = GetSplitPoint(cache, verts, uvs, cols, v1, v2, 2, 3, colOther, false);
+                int b1 = GetSplitPoint(cache, verts, uvs, cols, v2, v3, 1, 3, colOther, false);
+                int b2 = GetSplitPoint(cache, verts, uvs, cols, v2, v3, 2, 3, colOther, false);
+                int c1 = GetSplitPoint(cache, verts, uvs, cols, v3, v1, 1, 3, colOther, false);
+                int c2 = GetSplitPoint(cache, verts, uvs, cols, v3, v1, 2, 3, colOther, false);
+                int o = GetTriMidPoint(cache, verts, uvs, cols, v1, v2, v3, colCenter, true);
 
                 faces2.Add(new(v1, a1, c2));
                 faces2.Add(new(c2, a1, o));
@@ -134,6 +138,7 @@ public class IcoSphere : MonoBehaviour {
         Mesh mesh = new() {
             vertices = verts.ToArray(),
             uv = uvs.ToArray(),
+            colors = cols.ToArray(),
             triangles = tris
         };
 
@@ -143,9 +148,17 @@ public class IcoSphere : MonoBehaviour {
         meshFilter.mesh = mesh;
     }
 
+    uint IntToRandom(uint x, uint seed) {
+        uint hash = x * 0x9e3779b9u + seed;
+        hash = (hash ^ (hash >> 15)) * 0x85ebca6bu;
+        hash = (hash ^ (hash >> 13)) * 0xc2b2ae35u;
+        hash = hash ^ (hash >> 16);
+        return hash & 0xFF;
+    }
+
     // 分割点为t1/t2
-    private int GetSplitPoint(Dictionary<VertCache, int> cache, List<Vector3> verts, List<Vector2> uvs, int p1, int p2, int t1, int t2) {
-        VertCache key = new VertCache(p1, p2, t1, t2);
+    private int GetSplitPoint(Dictionary<VertCache, int> cache, List<Vector3> verts, List<Vector2> uvs, List<Color> cols, int p1, int p2, int t1, int t2, Color col, bool randomRgb) {
+        VertCache key = new(p1, p2, t1, t2);
         if (cache.TryGetValue(key, out int ret)) {
             return ret;
         }
@@ -159,13 +172,19 @@ public class IcoSphere : MonoBehaviour {
         verts.Add(pointSplit);
         uvs.Add(SphereToUV(pointSplit));
         int i = verts.Count - 1;
+        if (randomRgb) {
+            col.r = IntToRandom((uint)i, 11) / 255.0f;
+            col.g = IntToRandom((uint)i, 45) / 255.0f;
+            col.b = IntToRandom((uint)i, 14) / 255.0f;
+        }
+        cols.Add(col);
 
         cache.Add(key, i);
         return i;
     }
 
-    private int GetTriMidPoint(Dictionary<VertCache, int> cache, List<Vector3> verts, List<Vector2> uvs, int p1, int p2, int p3) {
-        VertCache key = new VertCache(p1, p2, p3);
+    private int GetTriMidPoint(Dictionary<VertCache, int> cache, List<Vector3> verts, List<Vector2> uvs, List<Color> cols, int p1, int p2, int p3, Color col, bool randomRgb) {
+        VertCache key = new(p1, p2, p3);
         if (cache.TryGetValue(key, out int ret)) {
             return ret;
         }
@@ -180,6 +199,12 @@ public class IcoSphere : MonoBehaviour {
         verts.Add(pointSplit);
         uvs.Add(SphereToUV(pointSplit));
         int i = verts.Count - 1;
+        if (randomRgb) {
+            col.r = IntToRandom((uint)i, 11) / 255.0f;
+            col.g = IntToRandom((uint)i, 45) / 255.0f;
+            col.b = IntToRandom((uint)i, 14) / 255.0f;
+        }
+        cols.Add(col);
 
         cache.Add(key, i);
         return i;

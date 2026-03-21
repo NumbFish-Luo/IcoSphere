@@ -30,15 +30,15 @@ Shader "Test/IcoSphereVertexColor" {
                 float4 vertex : POSITION;
                 float3 normal : NORMAL;
                 float2 uv : TEXCOORD0;
-                uint id : SV_VertexID;
+                float4 color : COLOR;
             };
 
             struct Varyings {
                 float4 vertex : SV_POSITION;
                 float2 uv : TEXCOORD0;
+                float4 color : COLOR;
                 float3 normal : TEXCOORD1;
                 float3 posWS : TEXCOORD2;
-                uint id : TEXCOORD3;
             };
 
             TEXTURE2D(_BaseMap);
@@ -57,7 +57,7 @@ Shader "Test/IcoSphereVertexColor" {
                 o.posWS = v.positionWS;
                 o.normal = TransformObjectToWorldNormal(i.normal);
                 o.uv = TRANSFORM_TEX(i.uv, _BaseMap);
-                o.id = i.id;
+                o.color = i.color;
                 return o;
             }
 
@@ -83,9 +83,7 @@ Shader "Test/IcoSphereVertexColor" {
                 s.alpha = albedo.a;
 
                 half4 col = UniversalFragmentPBR(d, s);
-                col.r = lerp(col.r, IntToRandom(i.id, 11) / 255.0, _LerpRandomColor);
-                col.g = lerp(col.g, IntToRandom(i.id, 45) / 255.0, _LerpRandomColor);
-                col.b = lerp(col.b, IntToRandom(i.id, 14) / 255.0, _LerpRandomColor);
+                col = lerp(col, i.color, _LerpRandomColor);
 
                 return col;
             }
