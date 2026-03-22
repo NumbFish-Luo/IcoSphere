@@ -82,98 +82,98 @@ Shader "Test/IcoSphereVertexColor" {
             ENDHLSL
         }
 
-        Pass {
-            Name "ShadowCaster"
-            Tags {
-                "LightMode" = "ShadowCaster"
-            }
+        // Pass {
+        //     Name "ShadowCaster"
+        //     Tags {
+        //         "LightMode" = "ShadowCaster"
+        //     }
 
-            ZWrite On
-            ZTest LEqual
-            ColorMask 0
+        //     ZWrite On
+        //     ZTest LEqual
+        //     ColorMask 0
 
-            HLSLPROGRAM
-            #pragma vertex vert
-            #pragma fragment frag
+        //     HLSLPROGRAM
+        //     #pragma vertex vert
+        //     #pragma fragment frag
 
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
+        //     #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+        //     #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
-            struct Attributes {
-                float4 vertex : POSITION;
-                float3 normal : NORMAL;
-                float2 uv : TEXCOORD0;
-            };
+        //     struct Attributes {
+        //         float4 vertex : POSITION;
+        //         float3 normal : NORMAL;
+        //         float2 uv : TEXCOORD0;
+        //     };
 
-            struct Varyings {
-                float4 vertex : SV_POSITION;
-                float2 uv : TEXCOORD0;
-            };
+        //     struct Varyings {
+        //         float4 vertex : SV_POSITION;
+        //         float2 uv : TEXCOORD0;
+        //     };
 
-            Varyings vert(Attributes i) {
-                Varyings o;
-                VertexPositionInputs v = GetVertexPositionInputs(i.vertex.xyz);
-                o.vertex = v.positionCS;
-                float3 n = TransformObjectToWorldNormal(i.normal);
-                Light mainLight = GetMainLight();
-                float3 l = mainLight.direction;
-                float3 p = v.positionWS;
-                ApplyShadowBias(p, n, l);
-                o.uv = i.uv;
-                return o;
-            }
+        //     Varyings vert(Attributes i) {
+        //         Varyings o;
+        //         VertexPositionInputs v = GetVertexPositionInputs(i.vertex.xyz);
+        //         o.vertex = v.positionCS;
+        //         float3 n = TransformObjectToWorldNormal(i.normal);
+        //         Light mainLight = GetMainLight();
+        //         float3 l = mainLight.direction;
+        //         float3 p = v.positionWS;
+        //         ApplyShadowBias(p, n, l);
+        //         o.uv = i.uv;
+        //         return o;
+        //     }
 
-            half4 frag(Varyings i) : SV_TARGET {
-                return 0;
-            }
-            ENDHLSL
-        }
+        //     half4 frag(Varyings i) : SV_TARGET {
+        //         return 0;
+        //     }
+        //     ENDHLSL
+        // }
 
-        Pass {
-            Name "DepthOnly"
-            Tags {
-                "LightMode" = "DepthOnly"
-            }
+        // Pass {
+        //     Name "DepthOnly"
+        //     Tags {
+        //         "LightMode" = "DepthOnly"
+        //     }
 
-            HLSLPROGRAM
-            #pragma vertex vert
-            #pragma fragment frag
+        //     HLSLPROGRAM
+        //     #pragma vertex vert
+        //     #pragma fragment frag
 
-            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+        //     #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-            struct Attributes {
-                float4 vertex : POSITION;
-            };
+        //     struct Attributes {
+        //         float4 vertex : POSITION;
+        //     };
 
-            struct Varyings {
-                float4 vertex : SV_POSITION;
-            };
+        //     struct Varyings {
+        //         float4 vertex : SV_POSITION;
+        //     };
 
-            Varyings vert(Attributes i) {
-                Varyings o;
-                o.vertex = TransformObjectToHClip(i.vertex.xyz);
-                return o;
-            }
+        //     Varyings vert(Attributes i) {
+        //         Varyings o;
+        //         o.vertex = TransformObjectToHClip(i.vertex.xyz);
+        //         return o;
+        //     }
 
-            half4 frag(Varyings i) : SV_Target {
-                return 0;
-            }
-            ENDHLSL
-        }
+        //     half4 frag(Varyings i) : SV_Target {
+        //         return 0;
+        //     }
+        //     ENDHLSL
+        // }
 
-        Pass {
-            Name "DepthNormals"
-            Tags {
-                "LightMode" = "DepthNormals"
-            }
+        // Pass {
+        //     Name "DepthNormals"
+        //     Tags {
+        //         "LightMode" = "DepthNormals"
+        //     }
 
-            HLSLPROGRAM
-            #pragma vertex DepthNormalsVertex
-            #pragma fragment DepthNormalsFragment
+        //     HLSLPROGRAM
+        //     #pragma vertex DepthNormalsVertex
+        //     #pragma fragment DepthNormalsFragment
 
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitInput.hlsl"
-            #include "Packages/com.unity.render-pipelines.universal/Shaders/LitDepthNormalsPass.hlsl"
-            ENDHLSL
-        }
+        //     #include "Packages/com.unity.render-pipelines.universal/Shaders/LitInput.hlsl"
+        //     #include "Packages/com.unity.render-pipelines.universal/Shaders/LitDepthNormalsPass.hlsl"
+        //     ENDHLSL
+        // }
     }
 }
