@@ -1,0 +1,41 @@
+#pragma kernel CullInstances
+
+struct InstanceData {
+    float4 position;
+    float4 color;
+};
+
+// input
+StructuredBuffer<InstanceData> _AllInstancesData;
+
+// output
+AppendStructuredBuffer<InstanceData> _VisibleInstancesData;
+
+float4 _FrustumPlanes[6];
+float _MaxDistance;
+float4x4 _CameraLocalToWorld;
+float _InstanceRadius;
+
+bool IsInFrustum(float3 worldPos, float radius) {
+    float3 cameraPos = _CameraLocalToWorld[3].xyz;
+    if (distance(worldPos, cameraPos) > _MaxDistance) {
+        return false;
+    }
+
+    for (int i = 0; i < 6; ++i) {
+        // dot(plane.xyz, pos) + plane.w 计算点到平面的垂直距离
+        if (dot(_FrustumPlanes[i].xyz, worldPos) + _FrustumPlanes[i].w + radius < 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[numthreads(64, 1, 1)]
+void CullInstances(uint3 id : SV_DispatchThreadID) {
+    InstanceData data = _AllInstancesData[id.x];
+    
+    if (IsInFrustum(data.position.xyz, _InstanceRadius)) {
+        _VisibleInstancesData.Append(data);
+    }
+}
