@@ -4,7 +4,6 @@ using System.Runtime.InteropServices;
 
 namespace IcoSphere {
     public class GpuCullingExample : MonoBehaviour {
-        [SerializeField] private Mesh mesh;
         [SerializeField] private Material mat;
         [SerializeField] private ComputeShader computeShader;
         [SerializeField] private int num = 100000;
@@ -12,6 +11,7 @@ namespace IcoSphere {
         [SerializeField] private float radius = 1.0f;
 
         private Camera cam;
+        private Mesh mesh;
         private ComputeBuffer allBuf;
         private ComputeBuffer visibleBuf;
         private ComputeBuffer argsBuf;
@@ -27,7 +27,39 @@ namespace IcoSphere {
 
         private void Awake() {
             cam = Camera.main;
+            mesh = NewTriMesh();
+
             Init();
+        }
+
+        private Mesh NewTriMesh() {
+            const float pi = Mathf.PI;
+            const float a0 = pi / 2.0f;
+            const float a1 = 11.0f * pi / 6.0f;
+            const float a2 = 7.0f * pi / 6.0f;
+            float c0 = Mathf.Cos(a0);
+            float s0 = Mathf.Sin(a0);
+            float c1 = Mathf.Cos(a1);
+            float s1 = Mathf.Sin(a1);
+            float c2 = Mathf.Cos(a2);
+            float s2 = Mathf.Sin(a2);
+            Mesh m = new() {
+                name = "Tri",
+                vertices = new Vector3[3] {
+                    new(c0, s0),
+                    new(c1, s1),
+                    new(c2, s2)
+                },
+                uv = new Vector2[3] {
+                    new(c0, s0),
+                    new(c1, s1),
+                    new(c2, s2)
+                },
+                triangles = new int[3] { 0, 1, 2 }
+            };
+            m.RecalculateNormals(); // 自动计算法线，实现光照效果
+            m.RecalculateBounds();
+            return m;
         }
 
         void OnDestroy() {
@@ -62,12 +94,12 @@ namespace IcoSphere {
 
             int stride = Marshal.SizeOf(typeof(InstanceData));
 
-            allBuf = ComputeBufManager.Instance.NewBuf(num, stride, ComputeBufferType.Default);
+            allBuf = ComputeBufManager.NewBuf(num, stride, ComputeBufferType.Default);
             allBuf.SetData(data);
 
-            visibleBuf = ComputeBufManager.Instance.NewBuf(num, stride, ComputeBufferType.Append);
+            visibleBuf = ComputeBufManager.NewBuf(num, stride, ComputeBufferType.Append);
 
-            argsBuf = ComputeBufManager.Instance.NewBuf(1, args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
+            argsBuf = ComputeBufManager.NewBuf(1, args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
 
             args[0] = mesh.GetIndexCount(0);
             args[1] = 0;
@@ -92,17 +124,17 @@ namespace IcoSphere {
 
         private void ReleaseAllBuf() {
             if (allBuf != null) {
-                ComputeBufManager.Instance.ScheduleRelease(allBuf);
+                ComputeBufManager.ScheduleRelease(allBuf);
                 allBuf = null;
             }
 
             if (visibleBuf != null) {
-                ComputeBufManager.Instance.ScheduleRelease(visibleBuf);
+                ComputeBufManager.ScheduleRelease(visibleBuf);
                 visibleBuf = null;
             }
 
             if (argsBuf != null) {
-                ComputeBufManager.Instance.ScheduleRelease(argsBuf);
+                ComputeBufManager.ScheduleRelease(argsBuf);
                 argsBuf = null;
             }
         }

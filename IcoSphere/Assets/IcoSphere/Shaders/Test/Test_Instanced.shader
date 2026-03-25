@@ -1,5 +1,6 @@
 Shader "Test/Instanced" {
     Properties {
+        _BaseMap ("Base Map", 2D) = "white" {}
         _BaseColor ("Base Color", Color) = (1, 1, 1, 1)
     }
     SubShader {
@@ -33,19 +34,26 @@ Shader "Test/Instanced" {
 
             StructuredBuffer<InstanceData> _VisibleInstancesData;
 
+
             struct Attributes {
                 float4 vertex : POSITION;
                 float3 normal : NORMAL;
+                float2 uv : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
             struct Varyings {
                 float4 vertex : SV_POSITION;
                 float4 color : COLOR;
+                float2 uv : TEXCOORD0;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
+            TEXTURE2D(_BaseMap);
+            SAMPLER(sampler_BaseMap);
+
             CBUFFER_START(UnityPerMaterial)
+                float4 _BaseMap_ST;
                 half4 _BaseColor;
             CBUFFER_END
 
@@ -65,12 +73,17 @@ Shader "Test/Instanced" {
 
                 // 传递实例颜色
                 o.color = data.color * _BaseColor;
+
+                o.uv = TRANSFORM_TEX(i.uv, _BaseMap);
+
                 return o;
             }
 
             half4 frag(Varyings i) : SV_Target {
                 UNITY_SETUP_INSTANCE_ID(i);
-                return i.color;
+                float t = (sin(_Time.y) + 1.0) * 0.5;
+                half4 col = lerp(i.color, half4(i.uv.rg, 0.0, 1.0), t);
+                return col;
             }
             ENDHLSL
         }

@@ -5,29 +5,27 @@ using UnityEngine;
 namespace IcoSphere {
     public class ComputeBufManager : MonoBehaviour {
         private static ComputeBufManager instance;
-        public static ComputeBufManager Instance {
-            get {
-                if (instance == null) {
-                    instance = FindAnyObjectByType(typeof(ComputeBufManager)) as ComputeBufManager;
-                    if (instance != null) {
-                        DontDestroyOnLoad(instance.gameObject);
-                    }
-                }
-                if (instance == null) {
-                    GameObject obj = new("ComputeBufManager");
-                    instance = obj.AddComponent<ComputeBufManager>();
-                    DontDestroyOnLoad(obj);
-                }
-                return instance;
-            }
-        }
-
+        private static bool quitting = false;
         private readonly static HashSet<ComputeBuffer> trackeds = new();
         private readonly static Queue<ComputeBuffer> pendingReleases = new();
-        private static bool quitting = false;
 
-        private void Awake() {
-            Application.quitting += OnQuitting;
+        public static ComputeBufManager InitInstance() {
+            if (quitting) {
+                Debug.LogWarning("Application is quitting, cannot create ComputeBuffer");
+                return null;
+            }
+            if (instance == null) {
+                instance = FindAnyObjectByType(typeof(ComputeBufManager)) as ComputeBufManager;
+                if (instance != null) {
+                    DontDestroyOnLoad(instance.gameObject);
+                }
+            }
+            if (instance == null) {
+                GameObject obj = new("ComputeBufManager");
+                instance = obj.AddComponent<ComputeBufManager>();
+                DontDestroyOnLoad(obj);
+            }
+            return instance;
         }
 
         private void Update() {
@@ -35,12 +33,21 @@ namespace IcoSphere {
         }
 
         private void OnDestroy() {
-            ForceReleaseAll();
+            OnDestroyOrQuit();
         }
 
-        public ComputeBuffer NewBuf(int count, int stride, ComputeBufferType type = ComputeBufferType.Default) {
-            if (quitting) {
-                Debug.LogWarning("Application is quitting, cannot create ComputeBuffer");
+        private void OnApplicationQuit() {
+            OnDestroyOrQuit();
+        }
+
+        private void OnDestroyOrQuit() {
+            quitting = true;
+            ForceReleaseAll();
+            instance = null;
+        }
+
+        public static ComputeBuffer NewBuf(int count, int stride, ComputeBufferType type = ComputeBufferType.Default) {
+            if (InitInstance() == null) {
                 return null;
             }
 
@@ -52,7 +59,7 @@ namespace IcoSphere {
             return buf;
         }
 
-        public void ScheduleRelease(ComputeBuffer buf) {
+        public static void ScheduleRelease(ComputeBuffer buf) {
             if (buf == null) {
                 return;
             }
@@ -62,7 +69,7 @@ namespace IcoSphere {
             }
         }
 
-        public void ReleaseImmediate(ComputeBuffer buf) {
+        private static void ReleaseImmediate(ComputeBuffer buf) {
             if (buf == null) {
                 return;
             }
@@ -80,7 +87,7 @@ namespace IcoSphere {
             }
         }
 
-        private void ProcessPendingReleases() {
+        private static void ProcessPendingReleases() {
             if (quitting) {
                 return;
             }
@@ -99,12 +106,7 @@ namespace IcoSphere {
             }
         }
 
-        private void OnQuitting() {
-            quitting = true;
-            ForceReleaseAll();
-        }
-
-        public void ForceReleaseAll() {
+        private static void ForceReleaseAll() {
             lock (trackeds) {
                 foreach (ComputeBuffer b in trackeds) {
                     try {
