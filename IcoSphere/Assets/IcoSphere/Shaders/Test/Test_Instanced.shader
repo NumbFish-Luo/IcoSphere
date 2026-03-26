@@ -9,6 +9,7 @@ Shader "Test/Instanced" {
             "RenderPipeline" = "UniversalPipeline"
         }
         LOD 200
+        Cull Off
 
         Pass {
             Name "ForwardLit"
@@ -29,11 +30,11 @@ Shader "Test/Instanced" {
 
             struct InstanceData {
                 float4 position;
+                float4 rotation;
                 float4 color;
             };
 
             StructuredBuffer<InstanceData> _VisibleInstancesData;
-
 
             struct Attributes {
                 float4 vertex : POSITION;
@@ -66,7 +67,23 @@ Shader "Test/Instanced" {
                 InstanceData data = _VisibleInstancesData[id];
 
                 // 将实例的位置应用到模型的顶点上
-                float3 worldPos = i.vertex.xyz + data.position.xyz;
+                float t = (sin(_Time.y) + 1.0) * 0.5;
+                float3 rotation = lerp(data.rotation.xyz, data.position.xyz, t);
+                float3 rc = cos(rotation);
+                float3 rs = sin(rotation);
+                float3x3 rx = float3x3(   1,     0,     0,
+                                          0,  rc.x, -rs.x,
+                                          0,  rs.x,  rc.x);
+                float3x3 ry = float3x3(rc.y,     0,  rs.y,
+                                          0,     1,     0,
+                                      -rs.y,     0,  rc.y);
+                float3x3 rz = float3x3(rc.z, -rs.z,     0,
+                                       rs.z,  rc.z,     0,
+                                          0,     0,     1);
+                float3x3 r = mul(ry, mul(rx, rz));
+
+                float3 rotatePos = mul(r, i.vertex.xyz);
+                float3 worldPos = rotatePos + data.position.xyz;
 
                 // 转换到裁剪空间
                 o.vertex = TransformWorldToHClip(worldPos);

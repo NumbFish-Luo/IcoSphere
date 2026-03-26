@@ -22,6 +22,7 @@ namespace IcoSphere {
         [StructLayout(LayoutKind.Sequential)]
         private struct InstanceData {
             public Vector4 position;
+            public Vector4 rotation;
             public Vector4 color;
         }
 
@@ -83,12 +84,11 @@ namespace IcoSphere {
                 float dist = Random.Range(0f, area / 2f);
                 float x = Mathf.Cos(angle) * dist;
                 float z = Mathf.Sin(angle) * dist;
-                Vector4 pos = new(x, 0, z, 1);
-                Color col = new(Random.value, Random.value, Random.value, 1);
 
                 data.Add(new InstanceData {
-                    position = pos,
-                    color = col
+                    position = new(x, 0, z, 1),
+                    rotation = new(0, 0, 0, 0),
+                    color = new(Random.value, Random.value, Random.value, 1)
                 });
             }
 
