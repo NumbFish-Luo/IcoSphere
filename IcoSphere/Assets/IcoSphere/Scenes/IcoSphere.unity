@@ -469,6 +469,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 08deabc8424980345a324c6873c0cb37, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  mat: {fileID: 2100000, guid: 2f60a9b76dc770141aa2a3abca204c1a, type: 2}
+  computeShader: {fileID: 7200000, guid: f48db19bf2c35f6488bc25548f71ab4f, type: 3}
+  radius: 1
 --- !u!1 &1581249781
 GameObject:
   m_ObjectHideFlags: 0

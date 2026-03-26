@@ -21,8 +21,9 @@ namespace IcoSphere {
 
         [StructLayout(LayoutKind.Sequential)]
         private struct InstanceData {
-            public Vector4 position;
-            public Vector4 rotation;
+            public Vector3 position;
+            public Vector3 rotation;
+            public Vector3 scale;
             public Vector4 color;
         }
 
@@ -63,7 +64,7 @@ namespace IcoSphere {
             return m;
         }
 
-        void OnDestroy() {
+        private void OnDestroy() {
             ReleaseAllBuf();
         }
 
@@ -86,8 +87,9 @@ namespace IcoSphere {
                 float z = Mathf.Sin(angle) * dist;
 
                 data.Add(new InstanceData {
-                    position = new(x, 0, z, 1),
-                    rotation = new(0, 0, 0, 0),
+                    position = new(x, 0, z),
+                    rotation = new(0, 0, 0),
+                    scale = Vector3.one,
                     color = new(Random.value, Random.value, Random.value, 1)
                 });
             }
@@ -147,7 +149,7 @@ namespace IcoSphere {
             return true;
         }
 
-        void Update() {
+        private void Update() {
             if (!CheckSupports()) {
                 return;
             }
@@ -194,10 +196,6 @@ namespace IcoSphere {
                 result[i] = new Vector4(planes[i].normal.x, planes[i].normal.y, planes[i].normal.z, planes[i].distance);
             }
             return result;
-        }
-
-        public void Cleanup() {
-            ReleaseAllBuf();
         }
     }
 }

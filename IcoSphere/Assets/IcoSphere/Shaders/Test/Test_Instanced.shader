@@ -29,8 +29,9 @@ Shader "Test/Instanced" {
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             struct InstanceData {
-                float4 position;
-                float4 rotation;
+                float3 position;
+                float3 rotation;
+                float3 scale;
                 float4 color;
             };
 
