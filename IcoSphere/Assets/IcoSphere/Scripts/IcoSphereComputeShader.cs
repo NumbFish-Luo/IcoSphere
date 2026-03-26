@@ -1,4 +1,4 @@
-using System.Collections;
+using System;
 using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using UnityEngine;
@@ -10,27 +10,71 @@ namespace IcoSphere {
         [SerializeField] private ComputeShader computeShader;
         [SerializeField] private float camRadius = 1.0f;
         [SerializeField] private float sphereRadius = 1.0f;
-        [SerializeField, Range(0, 3)] private int recursion = 2; // 递归细分次数, 越大面数越多
+        [SerializeField, Range(0, 5)] private int recursion = 2; // 递归细分次数, 越大面数越多
 
         private Camera cam;
         private Mesh mesh;
+        private int num;
         private ComputeBuffer allBuf;
         private ComputeBuffer visibleBuf;
         private ComputeBuffer argsBuf;
+        private const string kernelName = "TriCullInstances";
         private int kernel;
         private float instanceRadius;
         private readonly uint[] args = new uint[5] { 0, 0, 0, 0, 0 };
 
         [StructLayout(LayoutKind.Sequential)]
         private struct InstanceData {
-            public Vector3 position;
-            public Vector3 rotation;
-            public Vector3 scale;
-            public Vector4 color;
+            public Vector3 test;
+            public Vector3 v1;
+            public Vector3 v2;
+            public Vector3 v3;
         }
 
         private void Start() {
             Init();
+        }
+
+        private void Update() {
+            if (!CheckSupports()) {
+                return;
+            }
+
+            try {
+                Plane[] frustumPlanes = GeometryUtility.CalculateFrustumPlanes(cam);
+                computeShader.SetVectorArray("_FrustumPlanes", PlanesToVector4(frustumPlanes));
+                computeShader.SetFloat("_MaxDistance", cam.farClipPlane);
+                computeShader.SetMatrix("_CameraLocalToWorld", cam.transform.localToWorldMatrix);
+                computeShader.SetFloat("_InstanceRadius", instanceRadius);
+                computeShader.SetInt("_MaxNum", num);
+
+                // 执行剔除
+                visibleBuf.SetCounterValue(0);
+                int threadGroups = Mathf.CeilToInt(num / 64.0f);
+                computeShader.Dispatch(kernel, threadGroups, 1, 1);
+                ComputeBuffer.CopyCount(visibleBuf, argsBuf, sizeof(uint));
+
+                // 使用足够大的包围盒，确保所有相机都能看到
+                Vector3 cameraPos = cam.transform.position;
+                float maxDistance = cam.farClipPlane;
+                Bounds renderBounds = new(cameraPos, new Vector3(maxDistance * 2, maxDistance * 2, maxDistance * 2));
+
+                Graphics.DrawMeshInstancedIndirect(
+                    mesh: mesh,
+                    submeshIndex: 0,
+                    material: mat,
+                    bounds: renderBounds,
+                    bufferWithArgs: argsBuf,
+                    argsOffset: 0,
+                    properties: null,
+                    castShadows: UnityEngine.Rendering.ShadowCastingMode.On,
+                    receiveShadows: true,
+                    layer: 0,
+                    camera: null // 不指定相机，让Unity自动处理
+                );
+            } catch (Exception e) {
+                Debug.LogError($"Update error: {e.Message}");
+            }
         }
 
         private void OnDestroy() {
@@ -44,7 +88,7 @@ namespace IcoSphere {
             if (CheckSupports() == false) {
                 return;
             }
-            Pack pack = NewData(sphereRadius, recursion);
+            Pack pack = NewPack(sphereRadius, recursion);
             FreeBufs();
             NewBufs(pack);
         }
@@ -87,7 +131,7 @@ namespace IcoSphere {
             return m;
         }
 
-        public static Pack NewData(float radius, int recursion) {
+        public static Pack NewPack(float radius, int recursion) {
             Pack pack = new();
 
             // create 12 vertices of a icosahedron
@@ -161,7 +205,45 @@ namespace IcoSphere {
         }
 
         private void NewBufs(Pack pack) {
-            // todo...
+            int n = pack.tris.Count;
+            num = n;
+            List<InstanceData> data = new(n);
+            for (int i = 0; i < n; ++i) {
+                Tri packTris = pack.tris[i];
+                int v1 = packTris.v1;
+                int v2 = packTris.v2;
+                int v3 = packTris.v3;
+                data.Add(new() {
+                    test = new(i % 1000, i / 1000, 0),
+                    v1 = pack.verts[v1],
+                    v2 = pack.verts[v2],
+                    v3 = pack.verts[v3],
+                });
+            }
+
+            int stride = Marshal.SizeOf(typeof(InstanceData));
+
+            allBuf = ComputeBufManager.NewBuf(n, stride, ComputeBufferType.Default);
+            allBuf.SetData(data);
+
+            visibleBuf = ComputeBufManager.NewBuf(n, stride, ComputeBufferType.Append);
+
+            argsBuf = ComputeBufManager.NewBuf(1, args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
+            args[0] = mesh.GetIndexCount(0);
+            args[1] = 0;
+            args[2] = mesh.GetIndexStart(0);
+            args[3] = mesh.GetBaseVertex(0);
+            args[4] = 0;
+            argsBuf.SetData(args);
+
+            kernel = computeShader.FindKernel(kernelName);
+            if (kernel < 0) {
+                throw new Exception("Failed to find kernel '" + kernelName + "'");
+            }
+            computeShader.SetBuffer(kernel, "_AllInstancesData", allBuf);
+            computeShader.SetBuffer(kernel, "_VisibleInstancesData", visibleBuf);
+            mat.SetBuffer("_VisibleInstancesData", visibleBuf);
+            Debug.Log($"Buffers created successfully: {n} instances");
         }
 
         private void FreeBufs() {
@@ -228,6 +310,14 @@ namespace IcoSphere {
             float u = Mathf.Atan2(p.z, p.x) / (2.0f * Mathf.PI) + 0.5f;
             float v = 0.5f + Mathf.Asin(p.y) / Mathf.PI;
             return new Vector2(u, v);
+        }
+
+        private Vector4[] PlanesToVector4(Plane[] planes) {
+            Vector4[] result = new Vector4[6];
+            for (int i = 0; i < 6 && i < planes.Length; i++) {
+                result[i] = new Vector4(planes[i].normal.x, planes[i].normal.y, planes[i].normal.z, planes[i].distance);
+            }
+            return result;
         }
     }
 }

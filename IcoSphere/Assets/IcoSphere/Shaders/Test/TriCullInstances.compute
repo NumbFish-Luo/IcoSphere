@@ -1,0 +1,59 @@
+#pragma kernel TriCullInstances
+
+struct InstanceData {
+    float3 test;
+    float3 v1;
+    float3 v2;
+    float3 v3;
+};
+
+// input
+StructuredBuffer<InstanceData> _AllInstancesData;
+
+// output
+AppendStructuredBuffer<InstanceData> _VisibleInstancesData;
+
+float4 _FrustumPlanes[6];
+float _MaxDistance;
+float4x4 _CameraLocalToWorld;
+float _InstanceRadius;
+uint _MaxNum;
+
+bool IsInFrustum(float3 worldPos, float radius) {
+    float3 cameraPos = _CameraLocalToWorld[3].xyz;
+    if (distance(worldPos, cameraPos) > _MaxDistance) {
+        return false;
+    }
+
+    for (int i = 0; i < 6; ++i) {
+        // dot(plane.xyz, pos) + plane.w 计算点到平面的垂直距离
+        if (dot(_FrustumPlanes[i].xyz, worldPos) + _FrustumPlanes[i].w + radius < 0) {
+            return false;
+        }
+    }
+    return true;
+}
+
+[numthreads(64, 1, 1)]
+void TriCullInstances(uint3 id : SV_DispatchThreadID)
+{
+    uint i = id.x;
+    if (i >= _MaxNum)
+        return;
+
+    InstanceData data = _AllInstancesData[i];
+
+//#define DO_CULL
+#ifdef DO_CULL
+    float3 p = (data.v1 + data.v2 + data.v3) / 3.0f;
+    float l12 = length(data.v1 - data.v2);
+    float l23 = length(data.v2 - data.v3);
+    float l31 = length(data.v3 - data.v1);
+    float r = max(max(l12, l23), l31) * 0.5f;
+    if (IsInFrustum(p, _InstanceRadius * r)) {
+        _VisibleInstancesData.Append(data);
+    }
+#else
+    _VisibleInstancesData.Append(data);
+#endif
+}
