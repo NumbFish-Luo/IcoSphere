@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 namespace IcoSphere {
+    // 顶点序号缓存key
     public readonly struct VertCache {
         public readonly int p1;
         public readonly int p2;

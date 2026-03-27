@@ -1,10 +1,10 @@
 #pragma kernel TriCullInstances
 
 struct InstanceData {
-    float3 test;
     float3 v1;
     float3 v2;
     float3 v3;
+    float4 col;
 };
 
 // input
@@ -35,15 +35,15 @@ bool IsInFrustum(float3 worldPos, float radius) {
 }
 
 [numthreads(64, 1, 1)]
-void TriCullInstances(uint3 id : SV_DispatchThreadID)
-{
+void TriCullInstances(uint3 id : SV_DispatchThreadID) {
     uint i = id.x;
-    if (i >= _MaxNum)
+    if (i >= _MaxNum) {
         return;
+    }
 
     InstanceData data = _AllInstancesData[i];
 
-//#define DO_CULL
+#define DO_CULL
 #ifdef DO_CULL
     float3 p = (data.v1 + data.v2 + data.v3) / 3.0f;
     float l12 = length(data.v1 - data.v2);

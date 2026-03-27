@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 
 namespace IcoSphere {
+    // ComputeBuffer管理工具, 防止内存泄漏
     public class ComputeBufManager : MonoBehaviour {
         private static ComputeBufManager instance;
         private static bool quitting = false;

@@ -1,49 +1,143 @@
-using System.Collections;
+using System;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using UnityEngine;
 
 namespace IcoSphere {
-    // 生成完整多个三角形mesh组成球体
+    // 生成多个三角形mesh组成球体, 使用Compute Shader绘制大量三角形, 避免使用Mesh Renderer组件
     // 参考: http://blog.andreaskahler.com/2009/06/creating-icosphere-mesh-in-code.html
     public class IcoSphere : MonoBehaviour {
         [SerializeField] private Material mat;
-        [SerializeField] private float radius = 1f;
-        [SerializeField, Range(0, 3)] private int recursion = 2; // 递归细分次数, 越大面数越多
+        [SerializeField] private ComputeShader computeShader;
+        [SerializeField] private float camRadius = 1.0f;
+        [SerializeField] private float sphereRadius = 1.0f;
+        [SerializeField, Range(0, 4)] private int recursion = 3; // 递归细分次数, 越大面数越多
 
-        [Header("测试")]
-        [SerializeField] private bool testAnim = false;
+        private bool supportsComputeShaders;
+        private Camera cam;
+        private Mesh mesh;
+        private int num;
+        private ComputeBuffer allBuf;
+        private ComputeBuffer visibleBuf;
+        private ComputeBuffer argsBuf;
+        private const string kernelName = "TriCullInstances";
+        private int kernel;
+        private float instanceRadius;
+        private readonly uint[] args = new uint[5] { 0, 0, 0, 0, 0 };
 
-        private readonly List<ObjTri> objTris = new();
+        [StructLayout(LayoutKind.Sequential)]
+        private struct InstanceData {
+            public Vector3 v1;
+            public Vector3 v2;
+            public Vector3 v3;
+            public Vector4 col;
+        }
+
+        private void Awake() {
+            supportsComputeShaders = CheckSupportsComputeShaders();
+        }
 
         private void Start() {
-            NewIcoSphere();
+            Init();
         }
 
         private void Update() {
-            if (Input.GetKeyDown(KeyCode.Space)) {
-                testAnim = !testAnim;
-            }
-            if (testAnim == false) {
+            if (supportsComputeShaders == false) {
                 return;
             }
 
-            int n = objTris.Count;
-            float t = radius * Mathf.Lerp(0, 0.02f, (Mathf.Sin(Time.time) + 1.0f) * 0.5f);
-            transform.rotation = Quaternion.Euler(0, Time.time, 0);
-            for (int i = 0; i < n; ++i) {
-                objTris[i].obj.transform.localPosition = new Vector3(
-                    Mathf.Cos(i + Time.time) * t,
-                    Mathf.Sin(i + Time.time) * t,
-                    0);
+            try {
+                Plane[] frustumPlanes = GeometryUtility.CalculateFrustumPlanes(cam);
+                computeShader.SetVectorArray("_FrustumPlanes", PlanesToVector4(frustumPlanes));
+                computeShader.SetFloat("_MaxDistance", cam.farClipPlane);
+                computeShader.SetMatrix("_CameraLocalToWorld", cam.transform.localToWorldMatrix);
+                computeShader.SetFloat("_InstanceRadius", instanceRadius);
+                computeShader.SetInt("_MaxNum", num);
+
+                // 执行剔除
+                visibleBuf.SetCounterValue(0);
+                int threadGroups = Mathf.CeilToInt(num / 64.0f);
+                computeShader.Dispatch(kernel, threadGroups, 1, 1);
+                ComputeBuffer.CopyCount(visibleBuf, argsBuf, sizeof(uint));
+
+                // 使用足够大的包围盒，确保所有相机都能看到
+                Vector3 cameraPos = cam.transform.position;
+                float maxDistance = cam.farClipPlane;
+                Bounds renderBounds = new(cameraPos, new Vector3(maxDistance * 2, maxDistance * 2, maxDistance * 2));
+
+                Graphics.DrawMeshInstancedIndirect(
+                    mesh: mesh,
+                    submeshIndex: 0,
+                    material: mat,
+                    bounds: renderBounds,
+                    bufferWithArgs: argsBuf,
+                    argsOffset: 0,
+                    properties: null,
+                    castShadows: UnityEngine.Rendering.ShadowCastingMode.On,
+                    receiveShadows: true,
+                    layer: 0,
+                    camera: null // 不指定相机，让Unity自动处理
+                );
+            } catch (Exception e) {
+                Debug.LogError($"Update error: {e.Message}");
             }
         }
 
-        private void NewIcoSphere() {
-            Pack pack = NewData(radius, recursion);
-            NewObjTris(pack);
+        private void OnDestroy() {
+            FreeBufs();
         }
 
-        public static Pack NewData(float radius, int recursion) {
+        private void Init() {
+            cam = Camera.main;
+            mesh = NewTriMesh();
+            instanceRadius = mesh.bounds.extents.magnitude * camRadius;
+            if (supportsComputeShaders == false) {
+                return;
+            }
+            Pack pack = NewPack(sphereRadius, recursion);
+            FreeBufs();
+            NewBufs(pack);
+        }
+
+        public bool CheckSupportsComputeShaders() {
+            if (SystemInfo.supportsComputeShaders == false) {
+                Debug.LogWarning("Compute shaders not supported");
+                return false;
+            }
+            return true;
+        }
+
+        private Mesh NewTriMesh() {
+            const float pi = Mathf.PI;
+            const float a0 = pi / 2.0f;
+            const float a1 = 11.0f * pi / 6.0f;
+            const float a2 = 7.0f * pi / 6.0f;
+            float c0 = Mathf.Cos(a0);
+            float s0 = Mathf.Sin(a0);
+            float c1 = Mathf.Cos(a1);
+            float s1 = Mathf.Sin(a1);
+            float c2 = Mathf.Cos(a2);
+            float s2 = Mathf.Sin(a2);
+            Mesh m = new() {
+                name = "Tri",
+                vertices = new Vector3[3] {
+                    new(c0, s0),
+                    new(c1, s1),
+                    new(c2, s2)
+                },
+                uv = new Vector2[3] {
+                    new(c0, s0),
+                    new(c1, s1),
+                    new(c2, s2)
+                },
+                triangles = new int[3] { 0, 1, 2 }
+            };
+            m.RecalculateNormals(); // 自动计算法线，实现光照效果
+            m.RecalculateBounds();
+            return m;
+        }
+
+        public static Pack NewPack(float radius, int recursion) {
             Pack pack = new();
 
             // create 12 vertices of a icosahedron
@@ -116,25 +210,63 @@ namespace IcoSphere {
             return pack;
         }
 
-        public void TestNewIcoSphereWhole(Pack pack) {
-            string name = "TestWhole";
-            GameObject obj = new(name);
-            Transform tfWhole = obj.transform;
-            tfWhole.SetParent(transform);
-            tfWhole.localPosition = Vector3.zero;
-            MeshFilter meshFilter = obj.AddComponent<MeshFilter>();
-            obj.AddComponent<MeshRenderer>().material = mat;
-            PackToArr packToArr = new(pack);
-            Mesh mesh = new() {
-                name = name,
-                vertices = packToArr.verts,
-                uv = packToArr.uvs,
-                colors = packToArr.cols,
-                triangles = packToArr.tris
-            };
-            mesh.RecalculateNormals(); // 自动计算法线，实现光照效果
-            mesh.RecalculateBounds();
-            meshFilter.mesh = mesh;
+        private void NewBufs(Pack pack) {
+            int n = pack.tris.Count;
+            num = n;
+            List<InstanceData> data = new(n);
+            for (int i = 0; i < n; ++i) {
+                Tri packTris = pack.tris[i];
+                int v1 = packTris.v1;
+                int v2 = packTris.v2;
+                int v3 = packTris.v3;
+                data.Add(new() {
+                    v1 = pack.verts[v1],
+                    v2 = pack.verts[v2],
+                    v3 = pack.verts[v3],
+                    col = Misc.RandomRgb(i)
+                });
+            }
+
+            int stride = Marshal.SizeOf(typeof(InstanceData));
+
+            allBuf = ComputeBufManager.NewBuf(n, stride, ComputeBufferType.Default);
+            allBuf.SetData(data);
+
+            visibleBuf = ComputeBufManager.NewBuf(n, stride, ComputeBufferType.Append);
+
+            argsBuf = ComputeBufManager.NewBuf(1, args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
+            args[0] = mesh.GetIndexCount(0);
+            args[1] = 0;
+            args[2] = mesh.GetIndexStart(0);
+            args[3] = mesh.GetBaseVertex(0);
+            args[4] = 0;
+            argsBuf.SetData(args);
+
+            kernel = computeShader.FindKernel(kernelName);
+            if (kernel < 0) {
+                throw new Exception("Failed to find kernel '" + kernelName + "'");
+            }
+            computeShader.SetBuffer(kernel, "_AllInstancesData", allBuf);
+            computeShader.SetBuffer(kernel, "_VisibleInstancesData", visibleBuf);
+            mat.SetBuffer("_VisibleInstancesData", visibleBuf);
+            Debug.Log($"Buffers created successfully: {n} instances");
+        }
+
+        private void FreeBufs() {
+            if (allBuf != null) {
+                ComputeBufManager.ScheduleRelease(allBuf);
+                allBuf = null;
+            }
+
+            if (visibleBuf != null) {
+                ComputeBufManager.ScheduleRelease(visibleBuf);
+                visibleBuf = null;
+            }
+
+            if (argsBuf != null) {
+                ComputeBufManager.ScheduleRelease(argsBuf);
+                argsBuf = null;
+            }
         }
 
         // 分割点为t1/t2
@@ -186,37 +318,12 @@ namespace IcoSphere {
             return new Vector2(u, v);
         }
 
-        public static void DestroyAllObjTris(List<ObjTri> objTris) {
-            foreach (ObjTri o in objTris) {
-                Destroy(o.obj);
+        private Vector4[] PlanesToVector4(Plane[] planes) {
+            Vector4[] result = new Vector4[6];
+            for (int i = 0; i < 6 && i < planes.Length; i++) {
+                result[i] = new Vector4(planes[i].normal.x, planes[i].normal.y, planes[i].normal.z, planes[i].distance);
             }
-            objTris.Clear();
-        }
-
-        public void DestroyAllObjTris() {
-            DestroyAllObjTris(objTris);
-        }
-
-        public void NewObjTris(Pack pack) {
-            DestroyAllObjTris();
-
-            int n = pack.tris.Count;
-            for (int i = 0; i < n; ++i) {
-                string name = "Tri_" + i;
-                ObjTri objTri = new(name, mat, transform);
-                objTris.Add(objTri);
-                PackToArr packToArr = new(pack, i);
-                Mesh mesh = new() {
-                    name = name,
-                    vertices = packToArr.verts,
-                    uv = packToArr.uvs,
-                    colors = packToArr.cols,
-                    triangles = packToArr.tris,
-                };
-                mesh.RecalculateNormals();
-                mesh.RecalculateBounds();
-                objTri.meshFilter.mesh = mesh;
-            }
+            return result;
         }
     }
 }

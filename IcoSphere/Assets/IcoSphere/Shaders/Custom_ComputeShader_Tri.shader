@@ -1,4 +1,4 @@
-Shader "Test/Instanced" {
+Shader "Custom/ComputeShader/Tri" {
     Properties {
         _BaseMap ("Base Map", 2D) = "white" {}
         _BaseColor ("Base Color", Color) = (1, 1, 1, 1)
@@ -9,7 +9,7 @@ Shader "Test/Instanced" {
             "RenderPipeline" = "UniversalPipeline"
         }
         LOD 200
-        Cull Off
+        // Cull Off
 
         Pass {
             Name "ForwardLit"
@@ -29,10 +29,10 @@ Shader "Test/Instanced" {
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             struct InstanceData {
-                float3 position;
-                float3 rotation;
-                float3 scale;
-                float4 color;
+                float3 v1;
+                float3 v2;
+                float3 v3;
+                float4 col;
             };
 
             StructuredBuffer<InstanceData> _VisibleInstancesData;
@@ -69,40 +69,39 @@ Shader "Test/Instanced" {
                 InstanceData data = _VisibleInstancesData[id];
 
                 // 将实例的位置应用到模型的顶点上
-                float t = (sin(_Time.y) + 1.0) * 0.5;
-                float3 rotation = lerp(data.rotation.xyz, data.position.xyz, t);
-                float3 rc = cos(rotation);
-                float3 rs = sin(rotation);
-                float3x3 rx = float3x3(   1,     0,     0,
-                                          0,  rc.x, -rs.x,
-                                          0,  rs.x,  rc.x);
-                float3x3 ry = float3x3(rc.y,     0,  rs.y,
-                                          0,     1,     0,
-                                      -rs.y,     0,  rc.y);
-                float3x3 rz = float3x3(rc.z, -rs.z,     0,
-                                       rs.z,  rc.z,     0,
-                                          0,     0,     1);
-                float3x3 r = mul(ry, mul(rx, rz));
+                float3 p = 0.0;
+                switch(i.id) {
+                case 0: p = data.v1; break;
+                case 1: p = data.v2; break;
+                case 2: p = data.v3; break;
+                }
 
-                float3 rotatePos = mul(r, i.vertex.xyz);
-                float3 worldPos = rotatePos + data.position.xyz;
+            #define TEST_PLAY_ANIM
+            #ifdef TEST_PLAY_ANIM
+                float3 po = (data.v1 + data.v2 + data.v3) / 3.0;
+                float t = _Time.y;
+                float c = cos(t);
+                float s = sin(t);
+                float3x3 r = float3x3(c, -s, 0,
+                                      s,  c, 0,
+                                      0,  0, 1);
+                p = po + mul(r, p - po);
+            #endif
+
+                i.vertex.xyz = p;
 
                 // 转换到裁剪空间
-                o.vertex = TransformWorldToHClip(worldPos);
+                o.vertex = TransformWorldToHClip(i.vertex.xyz);
 
-                // 传递实例颜色
-                o.color = data.color * _BaseColor;
-
+                // 传递其他数据
+                o.color = data.col;
                 o.uv = TRANSFORM_TEX(i.uv, _BaseMap);
-
                 return o;
             }
 
             half4 frag(Varyings i) : SV_Target {
                 UNITY_SETUP_INSTANCE_ID(i);
-                float t = (sin(_Time.y) + 1.0) * 0.5;
-                half4 col = lerp(i.color, half4(i.uv.rg, 0.0, 1.0), t);
-                return col;
+                return i.color * _BaseColor;
             }
             ENDHLSL
         }
