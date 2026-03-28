@@ -70,22 +70,25 @@ Shader "Custom/ComputeShader/Tri" {
 
                 // 将实例的位置应用到模型的顶点上
                 float3 p = 0.0;
+                float3 v1 = data.v1;
+                float3 v2 = data.v2;
+                float3 v3 = data.v3;
                 switch(i.id) {
-                case 0: p = data.v1; break;
-                case 1: p = data.v2; break;
-                case 2: p = data.v3; break;
+                case 0: p = v1; break;
+                case 1: p = v2; break;
+                case 2: p = v3; break;
                 }
 
-            #define TEST_PLAY_ANIM
+            // #define TEST_PLAY_ANIM
             #ifdef TEST_PLAY_ANIM
-                float3 po = (data.v1 + data.v2 + data.v3) / 3.0;
                 float t = _Time.y;
                 float c = cos(t);
                 float s = sin(t);
                 float3x3 r = float3x3(c, -s, 0,
                                       s,  c, 0,
                                       0,  0, 1);
-                p = po + mul(r, p - po);
+                float3 p0 = (v1 + v2 + v3) / 3.0;
+                p = p0 + mul(r, p - p0);
             #endif
 
                 i.vertex.xyz = p;
@@ -99,9 +102,30 @@ Shader "Custom/ComputeShader/Tri" {
                 return o;
             }
 
+            float SdSegment(float2 p, float2 a, float2 b) {
+                float2 pa = p - a;
+                float2 ba = b - a;
+                float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+                return length(pa - ba * h);
+            }
+
+            float SmoothLine(float2 p, float2 a, float2 b, float width) {
+                float d = SdSegment(p, a, b);
+                return 1.0 - smoothstep(0.0, width, d);
+            }
+
             half4 frag(Varyings i) : SV_Target {
                 UNITY_SETUP_INSTANCE_ID(i);
-                return i.color * _BaseColor;
+                const float w = 0.05;
+                const float a0 = PI * 0.5;
+                const float a1 = 11.0 * PI / 6.0;
+                const float a2 = 7.0 * PI / 6.0;
+                const float2 p0 = 0.0;
+                float2 uv = i.uv.xy;
+                float l0 = SmoothLine(uv, p0, float2(cos(a0), -sin(a0)), w);
+                float l1 = SmoothLine(uv, p0, float2(cos(a1), -sin(a1)), w);
+                float l2 = SmoothLine(uv, p0, float2(cos(a2), -sin(a2)), w);
+                return saturate(i.color * 0.2 + l0 + l1 + l2);
             }
             ENDHLSL
         }

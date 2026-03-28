@@ -4,6 +4,7 @@ using UnityEngine;
 
 namespace IcoSphere {
     // 三角形顶点序号
+    [System.Serializable]
     public struct Tri {
         public int v1;
         public int v2;

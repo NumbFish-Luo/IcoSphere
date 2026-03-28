@@ -425,7 +425,7 @@ MonoBehaviour:
   computeShader: {fileID: 7200000, guid: 51044c25619023b4a952ac1e4ead3ebd, type: 3}
   camRadius: 1
   sphereRadius: 3
-  recursion: 4
+  recursion: 5
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0

@@ -11,7 +11,7 @@ namespace IcoSphere {
         [SerializeField] private ComputeShader computeShader;
         [SerializeField] private float camRadius = 1.0f;
         [SerializeField] private float sphereRadius = 1.0f;
-        [SerializeField, Range(0, 4)] private int recursion = 3; // 递归细分次数, 越大面数越多
+        [SerializeField, Range(0, 5)] private int recursion = 3; // 递归细分次数, 越大面数越多
 
         private bool supportsComputeShaders;
         private Camera cam;
@@ -24,6 +24,10 @@ namespace IcoSphere {
         private int kernel;
         private float instanceRadius;
         private readonly uint[] args = new uint[5] { 0, 0, 0, 0, 0 };
+
+        // 是否显示部分Debug.Log()方便调试
+        // 在某些大的for循环的时候unity不会输出log, 有时候建议给Debug.Log()打断点查看执行进度
+        private static readonly bool SHOW_DEBUG_LOG = false;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct InstanceData {
@@ -94,9 +98,14 @@ namespace IcoSphere {
             if (supportsComputeShaders == false) {
                 return;
             }
-            Pack pack = NewPack(sphereRadius, recursion);
+
+            PackArr pa = PackArr.ResReadFromBinFile(PackArr.ResCombineFilePath(recursion));
+            if (pa.IsEmpty()) {
+                pa = NewPackArrAndSaveBinFile(recursion);
+            }
+
             FreeBufs();
-            NewBufs(pack);
+            NewBufs(pa);
         }
 
         public bool CheckSupportsComputeShaders() {
@@ -137,38 +146,64 @@ namespace IcoSphere {
             return m;
         }
 
-        public static Pack NewPack(float radius, int recursion) {
-            Pack pack = new();
-
-            // create 12 vertices of a icosahedron
-            float t = Misc.GOLDEN_RATIO;
-            pack.verts = new() {
-                new(-1,  t,  0), new(1, t, 0), new(-1, -t,  0), new( 1, -t,  0),
-                new( 0, -1,  t), new(0, 1, t), new( 0, -1, -t), new( 0,  1, -t),
-                new( t,  0, -1), new(t, 0, 1), new(-t,  0, -1), new(-t,  0,  1)
-            };
-            pack.uvs = new();
-            pack.cols = new();
-            for (int i = 0; i < pack.verts.Count; i++) {
-                Vector3 norm = pack.verts[i].normalized;
-                pack.verts[i] = norm;
-                pack.uvs.Add(SphereToUV(norm));
-                pack.cols.Add(Color.white);
+        public static PackArr NewPackArrAndSaveBinFile(int recursion) {
+            // 尝试从二进制文件中读取数据
+            int readRecursion = recursion - 1;
+            PackArr readPackArr = new();
+            for (; readRecursion >= 0; --readRecursion) {
+                readPackArr = PackArr.ResReadFromBinFile(PackArr.ResCombineFilePath(readRecursion));
+                if (readPackArr.IsEmpty() == false) {
+                    break;
+                }
             }
 
-            // create 20 triangles of the icosahedron
-            pack.tris = new() {
-                new(0, 11, 5), new(0, 5, 1),  new(0, 1, 7),   new(0, 7, 10), new(0, 10, 11), // 5 faces around point 0
-                new(1, 5, 9),  new(5, 11, 4), new(11, 10, 2), new(10, 7, 6), new(7, 1, 8),   // 5 adjacent faces
-                new(3, 9, 4),  new(3, 4, 2),  new(3, 2, 6),   new(3, 6, 8),  new(3, 8, 9),   // 5 faces around point 3
-                new(4, 9, 5),  new(2, 4, 11), new(6, 2, 10),  new(8, 6, 7),  new(9, 8, 1)    // 5 adjacent faces
-            };
+            Pack pack = new();
+            if (readPackArr.IsEmpty()) {
+                // create 12 vertices of a icosahedron
+                float t = Misc.GOLDEN_RATIO;
+                pack.verts = new() {
+                    new(-1,  t,  0), new(1, t, 0), new(-1, -t,  0), new( 1, -t,  0),
+                    new( 0, -1,  t), new(0, 1, t), new( 0, -1, -t), new( 0,  1, -t),
+                    new( t,  0, -1), new(t, 0, 1), new(-t,  0, -1), new(-t,  0,  1)
+                };
+                for (int i = 0; i < pack.verts.Count; i++) {
+                    Vector3 norm = pack.verts[i].normalized;
+                    pack.verts[i] = norm;
+                }
+
+                // create 20 triangles of the icosahedron
+                pack.tris = new() {
+                    new(0, 11, 5), new(0, 5, 1),  new(0, 1, 7),   new(0, 7, 10), new(0, 10, 11), // 5 faces around point 0
+                    new(1, 5, 9),  new(5, 11, 4), new(11, 10, 2), new(10, 7, 6), new(7, 1, 8),   // 5 adjacent faces
+                    new(3, 9, 4),  new(3, 4, 2),  new(3, 2, 6),   new(3, 6, 8),  new(3, 8, 9),   // 5 faces around point 3
+                    new(4, 9, 5),  new(2, 4, 11), new(6, 2, 10),  new(8, 6, 7),  new(9, 8, 1)    // 5 adjacent faces
+                };
+
+                // 保存0次迭代时的二进制数据
+                PackArr.ResSaveToBinFile(new PackArr(pack), PackArr.ResCombineFilePath(0));
+            } else {
+                pack = new Pack(readPackArr);
+            }
 
             // refine triangles
-            Dictionary<VertCache, int> cache = new();
-            for (int i = 0; i < recursion; ++i) {
+            for (int i = readRecursion; i < recursion; ++i) {
+                Dictionary<VertCache, int> cache = new();
                 List<Tri> tris2 = new();
+
+                if (SHOW_DEBUG_LOG) {
+                    Debug.Log("开始执行迭代: " + i);
+                }
+                int n = pack.tris.Count;
+                int j = 0;
+
                 foreach (Tri tri in pack.tris) {
+                    if (SHOW_DEBUG_LOG) {
+                        const int k = 1000;
+                        if (++j % k == 0) {
+                            Debug.Log("迭代: " + i + ", 进度: " + j + "/" + n);
+                        }
+                    }
+
                     int v1 = tri.v1;
                     int v2 = tri.v2;
                     int v3 = tri.v3;
@@ -181,13 +216,13 @@ namespace IcoSphere {
                     //   c1---o---a2
                     //   / \ / \ / \
                     // v3--b2---b1--v2
-                    int a1 = GetSplitPoint(cache, pack, v1, v2, 1, 3, false);
-                    int a2 = GetSplitPoint(cache, pack, v1, v2, 2, 3, false);
-                    int b1 = GetSplitPoint(cache, pack, v2, v3, 1, 3, false);
-                    int b2 = GetSplitPoint(cache, pack, v2, v3, 2, 3, false);
-                    int c1 = GetSplitPoint(cache, pack, v3, v1, 1, 3, false);
-                    int c2 = GetSplitPoint(cache, pack, v3, v1, 2, 3, false);
-                    int o = GetTriMidPoint(cache, pack, v1, v2, v3, true);
+                    int a1 = GetSplitPoint(cache, pack, v1, v2, 1, 3);
+                    int a2 = GetSplitPoint(cache, pack, v1, v2, 2, 3);
+                    int b1 = GetSplitPoint(cache, pack, v2, v3, 1, 3);
+                    int b2 = GetSplitPoint(cache, pack, v2, v3, 2, 3);
+                    int c1 = GetSplitPoint(cache, pack, v3, v1, 1, 3);
+                    int c2 = GetSplitPoint(cache, pack, v3, v1, 2, 3);
+                    int o = GetTriMidPoint(cache, pack, v1, v2, v3);
 
                     tris2.Add(new(v1, a1, c2));
                     tris2.Add(new(c2, a1, o));
@@ -200,29 +235,32 @@ namespace IcoSphere {
                     tris2.Add(new(c1, b2, v3));
                 }
                 pack.tris = tris2;
+
+                if (SHOW_DEBUG_LOG) {
+                    Debug.Log("结束执行迭代: " + i);
+                }
+
+                // 每次迭代都保存一次二进制数据
+                PackArr.ResSaveToBinFile(new PackArr(pack), PackArr.ResCombineFilePath(i + 1));
             }
 
-            // 缩放顶点到目标半径
-            for (int i = 0; i < pack.verts.Count; ++i) {
-                pack.verts[i] *= radius;
-            }
-
-            return pack;
+            return new PackArr(pack);
         }
 
-        private void NewBufs(Pack pack) {
-            int n = pack.tris.Count;
+        private void NewBufs(PackArr pa) {
+            int n = pa.tris.Length;
+            float r = sphereRadius;
             num = n;
             List<InstanceData> data = new(n);
             for (int i = 0; i < n; ++i) {
-                Tri packTris = pack.tris[i];
+                Tri packTris = pa.tris[i];
                 int v1 = packTris.v1;
                 int v2 = packTris.v2;
                 int v3 = packTris.v3;
                 data.Add(new() {
-                    v1 = pack.verts[v1],
-                    v2 = pack.verts[v2],
-                    v3 = pack.verts[v3],
+                    v1 = pa.verts[v1] * r,
+                    v2 = pa.verts[v2] * r,
+                    v3 = pa.verts[v3] * r,
                     col = Misc.RandomRgb(i)
                 });
             }
@@ -269,8 +307,8 @@ namespace IcoSphere {
             }
         }
 
-        // 分割点为t1/t2
-        private static int GetSplitPoint(Dictionary<VertCache, int> cache, Pack pack, int p1, int p2, int t1, int t2, bool randomRgb) {
+        // 分割点为t1/t2, 这里是按弧度分割
+        private static int GetSplitPoint(Dictionary<VertCache, int> cache, Pack pack, int p1, int p2, int t1, int t2) {
             VertCache key = new(p1, p2, t1, t2);
             if (cache.TryGetValue(key, out int ret)) {
                 return ret;
@@ -279,18 +317,18 @@ namespace IcoSphere {
             // not in cache, calculate it
             Vector3 point1 = pack.verts[p1];
             Vector3 point2 = pack.verts[p2];
-            Vector3 pointSplit = Vector3.Lerp(point1, point2, (t1 * 1.0f) / t2).normalized;
+            float theta = Mathf.Acos(Vector3.Dot(point1, point2));
+            float t = (t1 * 1.0f) / t2;
+            Vector3 pointSplit = (Mathf.Sin((1 - t) * theta)) / Mathf.Sin(theta) * point1 + (Mathf.Sin(t * theta) / Mathf.Sin(theta)) * point2;
 
             // add vertex makes sure point is on unit sphere
             pack.verts.Add(pointSplit);
-            pack.uvs.Add(SphereToUV(pointSplit));
             int i = pack.verts.Count - 1;
-            pack.cols.Add(randomRgb ? Misc.RandomRgb(i) : Color.clear);
             cache.Add(key, i);
             return i;
         }
 
-        private static int GetTriMidPoint(Dictionary<VertCache, int> cache, Pack pack, int p1, int p2, int p3, bool randomRgb) {
+        private static int GetTriMidPoint(Dictionary<VertCache, int> cache, Pack pack, int p1, int p2, int p3) {
             VertCache key = new(p1, p2, p3);
             if (cache.TryGetValue(key, out int ret)) {
                 return ret;
@@ -304,18 +342,9 @@ namespace IcoSphere {
 
             // add vertex makes sure point is on unit sphere
             pack.verts.Add(pointSplit);
-            pack.uvs.Add(SphereToUV(pointSplit));
             int i = pack.verts.Count - 1;
-            pack.cols.Add(randomRgb ? Misc.RandomRgb(i) : Color.clear);
             cache.Add(key, i);
             return i;
-        }
-
-        // 将单位球面上的点转换为UV坐标, 经纬度映射, 默认p为单位向量
-        public static Vector2 SphereToUV(Vector3 p) {
-            float u = Mathf.Atan2(p.z, p.x) / (2.0f * Mathf.PI) + 0.5f;
-            float v = 0.5f + Mathf.Asin(p.y) / Mathf.PI;
-            return new Vector2(u, v);
         }
 
         private Vector4[] PlanesToVector4(Plane[] planes) {
