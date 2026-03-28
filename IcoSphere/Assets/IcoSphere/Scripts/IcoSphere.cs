@@ -27,7 +27,7 @@ namespace IcoSphere {
 
         // 是否显示部分Debug.Log()方便调试
         // 在某些大的for循环的时候unity不会输出log, 有时候建议给Debug.Log()打断点查看执行进度
-        private static readonly bool SHOW_DEBUG_LOG = false;
+        private static readonly bool SHOW_DEBUG_LOG = true;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct InstanceData {
@@ -159,6 +159,7 @@ namespace IcoSphere {
 
             Pack pack = new();
             if (readPackArr.IsEmpty()) {
+                readRecursion = 0;
                 // create 12 vertices of a icosahedron
                 float t = Misc.GOLDEN_RATIO;
                 pack.verts = new() {
@@ -179,8 +180,11 @@ namespace IcoSphere {
                     new(4, 9, 5),  new(2, 4, 11), new(6, 2, 10),  new(8, 6, 7),  new(9, 8, 1)    // 5 adjacent faces
                 };
 
+                // 推算临边数据
+                pack.CalcAbuts();
+
                 // 保存0次迭代时的二进制数据
-                PackArr.ResSaveToBinFile(new PackArr(pack), PackArr.ResCombineFilePath(0));
+                PackArr.SaveToBinFile(new PackArr(pack), PackArr.CombineFilePath(0));
             } else {
                 pack = new Pack(readPackArr);
             }
@@ -235,13 +239,14 @@ namespace IcoSphere {
                     tris2.Add(new(c1, b2, v3));
                 }
                 pack.tris = tris2;
+                pack.CalcAbuts();
 
                 if (SHOW_DEBUG_LOG) {
                     Debug.Log("结束执行迭代: " + i);
                 }
 
                 // 每次迭代都保存一次二进制数据
-                PackArr.ResSaveToBinFile(new PackArr(pack), PackArr.ResCombineFilePath(i + 1));
+                PackArr.SaveToBinFile(new PackArr(pack), PackArr.CombineFilePath(i + 1));
             }
 
             return new PackArr(pack);

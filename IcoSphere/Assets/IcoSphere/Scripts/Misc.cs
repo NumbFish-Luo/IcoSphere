@@ -1,4 +1,4 @@
-using System.Collections;
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -26,6 +26,29 @@ namespace IcoSphere {
 
         public static Color RandomRgb(int i, float a = 1.0f) {
             return RandomRgb((uint)i, a);
+        }
+
+        public static A[] ToArr<K, V, A>(this Dictionary<K, V> dict, Func<K, V, A> newA) {
+            if (dict == null) {
+                return null;
+            }
+            A[] a = new A[dict.Count];
+            int i = 0;
+            foreach (KeyValuePair<K, V> kv in dict) {
+                a[i++] = newA(kv.Key, kv.Value);
+            }
+            return a;
+        }
+
+        public static Dictionary<K, V> ToDict<K, V, A>(this A[] a, Func<A, K> getK, Func<A, V> getV) {
+            if (a == null) {
+                return null;
+            }
+            Dictionary<K, V> dict = new();
+            foreach (A aa in a) {
+                dict.Add(getK(aa), getV(aa));
+            }
+            return dict;
         }
     }
 }
