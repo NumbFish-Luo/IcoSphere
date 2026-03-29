@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
@@ -24,10 +25,6 @@ namespace IcoSphere {
         private int kernel;
         private float instanceRadius;
         private readonly uint[] args = new uint[5] { 0, 0, 0, 0, 0 };
-
-        // 是否显示部分Debug.Log()方便调试
-        // 在某些大的for循环的时候unity不会输出log, 有时候建议给Debug.Log()打断点查看执行进度
-        private static readonly bool SHOW_DEBUG_LOG = true;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct InstanceData {
@@ -83,7 +80,7 @@ namespace IcoSphere {
                     camera: null // 不指定相机，让Unity自动处理
                 );
             } catch (Exception e) {
-                Debug.LogError($"Update error: {e.Message}");
+                UnityEngine.Debug.LogError($"Update error: {e.Message}");
             }
         }
 
@@ -99,10 +96,13 @@ namespace IcoSphere {
                 return;
             }
 
+            Stopwatch sw = new();
+
             PackArr pa = PackArr.ResReadFromBinFile(PackArr.ResCombineFilePath(recursion));
             if (pa.IsEmpty()) {
                 pa = NewPackArrAndSaveBinFile(recursion);
             }
+            StartCoroutine(pa.CoroutineGetAbuts());
 
             FreeBufs();
             NewBufs(pa);
@@ -110,7 +110,7 @@ namespace IcoSphere {
 
         public bool CheckSupportsComputeShaders() {
             if (SystemInfo.supportsComputeShaders == false) {
-                Debug.LogWarning("Compute shaders not supported");
+                UnityEngine.Debug.LogWarning("Compute shaders not supported");
                 return false;
             }
             return true;
@@ -194,20 +194,7 @@ namespace IcoSphere {
                 Dictionary<VertCache, int> cache = new();
                 List<Tri> tris2 = new();
 
-                if (SHOW_DEBUG_LOG) {
-                    Debug.Log("开始执行迭代: " + i);
-                }
-                int n = pack.tris.Count;
-                int j = 0;
-
                 foreach (Tri tri in pack.tris) {
-                    if (SHOW_DEBUG_LOG) {
-                        const int k = 1000;
-                        if (++j % k == 0) {
-                            Debug.Log("迭代: " + i + ", 进度: " + j + "/" + n);
-                        }
-                    }
-
                     int v1 = tri.v1;
                     int v2 = tri.v2;
                     int v3 = tri.v3;
@@ -240,10 +227,6 @@ namespace IcoSphere {
                 }
                 pack.tris = tris2;
                 pack.CalcAbuts();
-
-                if (SHOW_DEBUG_LOG) {
-                    Debug.Log("结束执行迭代: " + i);
-                }
 
                 // 每次迭代都保存一次二进制数据
                 PackArr.SaveToBinFile(new PackArr(pack), PackArr.CombineFilePath(i + 1));
@@ -292,7 +275,7 @@ namespace IcoSphere {
             computeShader.SetBuffer(kernel, "_AllInstancesData", allBuf);
             computeShader.SetBuffer(kernel, "_VisibleInstancesData", visibleBuf);
             mat.SetBuffer("_VisibleInstancesData", visibleBuf);
-            Debug.Log($"Buffers created successfully: {n} instances");
+            UnityEngine.Debug.Log($"Buffers created successfully: {n} instances");
         }
 
         private void FreeBufs() {

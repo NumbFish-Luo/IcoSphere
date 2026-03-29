@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.MemoryMappedFiles;
@@ -47,6 +48,23 @@ namespace IcoSphere {
                 abuts = edgeAbuts?.ToDict(ea => ea.e, ea => ea.a);
             }
             return abuts;
+        }
+
+        public IEnumerator CoroutineGetAbuts() {
+            abuts ??= new();
+            int i = abuts.Count;
+            int n = edgeAbuts.Length;
+            bool showLog = true;
+            int k = 100;
+            while (i < n) {
+                if (showLog && (i % k == 0)) {
+                    Debug.Log($"解析毗邻数据: {i}/{n} ({i * 100.0f / n}%)");
+                }
+                EdgeAbut ea = edgeAbuts[i++];
+                abuts.Add(ea.e, ea.a);
+                yield return null;
+            }
+            Debug.Log($"解析毗邻数据完毕!");
         }
 
         public readonly bool IsEmpty() {
