@@ -1,0 +1,155 @@
+﻿module;
+#define BYTE_ADDR_CONST(DATA_ADDR) reinterpret_cast<const char*>(DATA_ADDR)
+#define BYTE_ADDR(DATA_ADDR) reinterpret_cast<char*>(DATA_ADDR)
+export module IcoSphere.Pack;
+
+import <iostream>;
+import <vector>;
+import <string>;
+import <fstream>;
+import Math.Vec3;
+import Mesh.Tri;
+import IcoSphere.HexAbuts;
+
+using std::cout;
+using std::cerr;
+using std::endl;
+using std::vector;
+using std::string;
+using std::format;
+using std::ifstream;
+using std::ofstream;
+using Math::Vec3;
+using Mesh::Tri;
+
+namespace IcoSphere {
+    export class Pack {
+    private:
+        vector<HexAbuts::Kvs> abutsData; // 拆解成数组后的毗邻数据
+
+        void AbutsToData() {
+            size_t n = abuts.size();
+            abutsData = vector<HexAbuts::Kvs>(n);
+            for (int32_t i = 0; i < n; ++i) {
+                abutsData[i] = abuts[i].ToKvs();
+            }
+        }
+
+        void DataToAbuts() {
+            size_t n = abutsData.size();
+            abuts = vector<HexAbuts>(n);
+            for (int32_t i = 0; i < n; ++i) {
+                abuts[i] = HexAbuts(abutsData[i]);
+            }
+        }
+
+    public:
+        vector<Vec3> verts;
+        vector<Tri> tris;
+        vector<HexAbuts> abuts; // 数量与verts一致
+
+        // 推算毗邻数据
+        void CalcAbuts() {
+            // 数量与verts一致
+            size_t nv = verts.size();
+            size_t nt = tris.size();
+            abuts = vector<HexAbuts>(nv);
+            for (int32_t t = 0; t < nt; ++t) {
+                //     v0:a0
+                //      / \
+                //     / t \
+                // v2:a2---v1:a1
+                const Tri& tt = tris[t];
+                int32_t v0 = tt[0];
+                int32_t v1 = tt[1];
+                int32_t v2 = tt[2];
+                HexAbuts& a0 = abuts[v0];
+                HexAbuts& a1 = abuts[v1];
+                HexAbuts& a2 = abuts[v2];
+                a0.Push(v1, t);
+                a0.Push(v2, t);
+                a1.Push(v0, t);
+                a1.Push(v2, t);
+                a2.Push(v0, t);
+                a2.Push(v1, t);
+            }
+
+            AbutsToData();
+        }
+
+        string AbutsToStr() const {
+            string str = "";
+            size_t m = abuts.size();
+            for (size_t i = 0; i < m; ++i) {
+                str += format("{}: {}\n", i, abuts[i].ToStr());
+            }
+            return str;
+        }
+
+        bool Save(const char* filePath) const {
+            // 打开文件
+            ofstream file{ filePath, std::ios::binary };
+            if (!file) {
+                cerr << "save file == null: " << filePath << endl;
+                return false;
+            }
+
+            // 写入数据头
+            vector<int32_t> header = {
+                (int32_t)verts.size(),
+                (int32_t)tris.size(),
+                (int32_t)abutsData.size()
+            };
+            file.write(BYTE_ADDR_CONST(header.data()), 3 * sizeof(int32_t));
+
+            // 写入字节
+            file.write(BYTE_ADDR_CONST(verts.data()), verts.size() * sizeof(Vec3));
+            file.write(BYTE_ADDR_CONST(tris.data()), tris.size() * sizeof(Tri));
+            for (const HexAbuts::Kvs& kvs : abutsData) {
+                file.write(BYTE_ADDR_CONST(kvs.data()), HexAbuts::KVS_MAX_SIZE * sizeof(HexAbuts::Kv));
+            }
+
+            // 关闭文件
+            file.close();
+            return true;
+        }
+
+        bool Read(const char* filePath) {
+            // 打开文件
+            ifstream file{ filePath, std::ios::binary };
+            if (!file) {
+                cerr << "read file == null: " << filePath << endl;
+                return false;
+            }
+
+            // 读取数据头
+            vector<int32_t> header = { 0, 0, 0 };
+            file.read(BYTE_ADDR(header.data()), 3 * sizeof(int32_t));
+
+            // 读取字节
+            const size_t vertsSize = (size_t)header[0];
+            verts = vector<Vec3>(vertsSize);
+            file.read(BYTE_ADDR(verts.data()), vertsSize * sizeof(Vec3));
+
+            const size_t trisSize = (size_t)header[1];
+            tris = vector<Tri>(trisSize);
+            file.read(BYTE_ADDR(tris.data()), trisSize * sizeof(Tri));
+
+            const size_t abutsDataSize = (size_t)header[2];
+            abutsData = vector<HexAbuts::Kvs>(abutsDataSize);
+            for (size_t i = 0; i < abutsDataSize; ++i) {
+                HexAbuts::Kvs& kvs = abutsData[i];
+                const size_t n = HexAbuts::KVS_MAX_SIZE;
+                kvs = HexAbuts::Kvs(n);
+                file.read(BYTE_ADDR(kvs.data()), n * sizeof(HexAbuts::Kv));
+            }
+
+            // 转换毗邻数据
+            DataToAbuts();
+
+            // 关闭文件
+            file.close();
+            return true;
+        }
+    };
+}

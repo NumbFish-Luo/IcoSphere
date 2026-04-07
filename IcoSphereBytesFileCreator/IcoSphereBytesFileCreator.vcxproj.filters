@@ -13,10 +13,40 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="源文件\Mesh">
+      <UniqueIdentifier>{5327427e-30af-46e7-b097-e3b495532783}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\Math">
+      <UniqueIdentifier>{406db669-0cac-4e02-8027-eca33b403715}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="源文件\IcoSphere">
+      <UniqueIdentifier>{24034a8e-a2e7-443c-9b5e-ed1208ab1446}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="IcoSphereBytesFileCreator.cpp">
+    <ClCompile Include="Main.cpp">
       <Filter>源文件</Filter>
+    </ClCompile>
+    <ClCompile Include="Tri.ixx">
+      <Filter>源文件\Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="Vec3.ixx">
+      <Filter>源文件\Math</Filter>
+    </ClCompile>
+    <ClCompile Include="HexAbuts.ixx">
+      <Filter>源文件\IcoSphere</Filter>
+    </ClCompile>
+    <ClCompile Include="Pack.ixx">
+      <Filter>源文件\IcoSphere</Filter>
+    </ClCompile>
+    <ClCompile Include="Abut.ixx">
+      <Filter>源文件\Mesh</Filter>
+    </ClCompile>
+    <ClCompile Include="IcoSphere.ixx">
+      <Filter>源文件\IcoSphere</Filter>
+    </ClCompile>
+    <ClCompile Include="VertCache.ixx">
+      <Filter>源文件\IcoSphere</Filter>
     </ClCompile>
   </ItemGroup>
 </Project>
