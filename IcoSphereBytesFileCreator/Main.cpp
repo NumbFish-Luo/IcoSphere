@@ -8,7 +8,7 @@ int main() {
     cout << "hello world" << endl;
 
     int recursion = 5;
-    IcoSphere::IcoSphere::NewPackAndSave(recursion);
+    auto pack{ IcoSphere::IcoSphere::NewPackAndSave(recursion) };
 
     cout << "over!" << endl;
 }

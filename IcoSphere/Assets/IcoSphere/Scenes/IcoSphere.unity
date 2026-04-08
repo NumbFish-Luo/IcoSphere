@@ -421,10 +421,6 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 08deabc8424980345a324c6873c0cb37, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  mat: {fileID: 2100000, guid: 374aac135ad0b0240930ebc9357c041b, type: 2}
-  computeShader: {fileID: 7200000, guid: 51044c25619023b4a952ac1e4ead3ebd, type: 3}
-  camRadius: 1
-  sphereRadius: 3
   recursion: 5
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
