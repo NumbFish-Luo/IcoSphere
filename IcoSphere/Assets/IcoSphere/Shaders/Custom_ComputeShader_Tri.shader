@@ -52,6 +52,11 @@ Shader "Custom/ComputeShader/Tri" {
                 float4 vertex : SV_POSITION;
                 float4 color : COLOR;
                 float2 uv : TEXCOORD0;
+                float3 worldPos : TEXCOORD1;
+                nointerpolation float3 ctr : TEXCOORD2; // 当前三角形中心
+                nointerpolation float3 c01 : TEXCOORD3;
+                nointerpolation float3 c12 : TEXCOORD4;
+                nointerpolation float3 c20 : TEXCOORD5;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -82,17 +87,11 @@ Shader "Custom/ComputeShader/Tri" {
                 case 2: p = v2; break;
                 }
 
-            // #define TEST_PLAY_ANIM
-            #ifdef TEST_PLAY_ANIM
-                float t = _Time.y;
-                float c = cos(t);
-                float s = sin(t);
-                float3x3 r = float3x3(c, -s, 0,
-                                      s,  c, 0,
-                                      0,  0, 1);
-                float3 p0 = (v0 + v1 + v2) / 3.0;
-                p = p0 + mul(r, p - p0);
-            #endif
+                o.worldPos = p;
+                o.ctr = (v0 + v1 + v2) / 3.0;
+                o.c01 = data.c01;
+                o.c12 = data.c12;
+                o.c20 = data.c20;
 
                 i.vertex.xyz = p;
 
@@ -112,23 +111,52 @@ Shader "Custom/ComputeShader/Tri" {
                 return length(pa - ba * h);
             }
 
+            float SdSegment3d(float3 p, float3 a, float3 b) {
+                float3 pa = p - a;
+                float3 ba = b - a;
+                float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
+                return length(pa - ba * h);
+            }
+
             float SmoothLine(float2 p, float2 a, float2 b, float width) {
                 float d = SdSegment(p, a, b);
                 return 1.0 - smoothstep(0.0, width, d);
             }
 
+            float SmoothLine3d(float3 p, float3 a, float3 b, float width) {
+                float d = SdSegment3d(p, a, b);
+                return 1.0 - smoothstep(0.0, width, d);
+            }
+
             half4 frag(Varyings i) : SV_Target {
                 UNITY_SETUP_INSTANCE_ID(i);
-                const float w = 0.05;
-                const float a0 = PI * 0.5;
-                const float a1 = 11.0 * PI / 6.0;
-                const float a2 = 7.0 * PI / 6.0;
-                const float2 p0 = 0.0;
-                float2 uv = i.uv.xy;
-                float l0 = SmoothLine(uv, p0, float2(cos(a0), -sin(a0)), w);
-                float l1 = SmoothLine(uv, p0, float2(cos(a1), -sin(a1)), w);
-                float l2 = SmoothLine(uv, p0, float2(cos(a2), -sin(a2)), w);
-                return saturate(i.color * 0.2 + l0 + l1 + l2);
+
+                float t = (sin(_Time.y) + 1.0) * 0.5;
+                float4 luv = 0.0;
+                {
+                    const float w = 0.05;
+                    const float a0 = PI * 0.5;
+                    const float a1 = 11.0 * PI / 6.0;
+                    const float a2 = 7.0 * PI / 6.0;
+                    const float2 p0 = 0.0;
+                    float2 uv = i.uv.xy;
+                    float l0 = SmoothLine(uv, p0, float2(cos(a0), -sin(a0)), w);
+                    float l1 = SmoothLine(uv, p0, float2(cos(a1), -sin(a1)), w);
+                    float l2 = SmoothLine(uv, p0, float2(cos(a2), -sin(a2)), w);
+                    luv = saturate(l0 + l1 + l2) * float4(1.0, 0.0, 0.0, 0.5) * t;
+                }
+
+                float4 lwp = 0.0;
+                {
+                    float3 wp = i.worldPos;
+                    float3 ctr = i.ctr;
+                    float w = 0.00005;
+                    float l0 = SmoothLine3d(wp, ctr, i.c01, w);
+                    float l1 = SmoothLine3d(wp, ctr, i.c12, w);
+                    float l2 = SmoothLine3d(wp, ctr, i.c20, w);
+                    lwp = saturate(l0 + l1 + l2) * float4(0.0, 1.0, 0.0, 0.5) * (1.0 - t);
+                }
+                return saturate(i.color * 0.2 + luv + lwp);
             }
             ENDHLSL
         }
