@@ -13,6 +13,8 @@ namespace IcoSphere {
         public Vector3[] verts;
         public Tri[] tris;
         public HexAbuts[] abuts;
+        public Vector3[] ctrs;
+        public Tri[] adjTris;
 
         public static Pack Read(int recursion) {
             string resFilePath = RES_DEFAULT_PATH + recursion;
@@ -36,6 +38,8 @@ namespace IcoSphere {
                 Int32 vertsSize = reader.ReadInt32();
                 Int32 trisSize = reader.ReadInt32();
                 Int32 abutsSize = reader.ReadInt32();
+                Int32 ctrsSize = reader.ReadInt32();
+                Int32 adjTrisSize = reader.ReadInt32();
 
                 // 读取顶点数据
                 pack.verts = new Vector3[vertsSize];
@@ -97,7 +101,25 @@ namespace IcoSphere {
                         v5, a5);
                 }
 
-                Debug.Log($"Resources反序列化成功: {resFilePath}, 顶点数: {vertsSize}, 三角形数: {trisSize}, 毗邻数据数: {abutsSize}");
+                // 读取毗邻三角形中心坐标数据
+                pack.ctrs = new Vector3[ctrsSize];
+                for (Int32 i = 0; i < ctrsSize; ++i) {
+                    float x = reader.ReadSingle();
+                    float y = reader.ReadSingle();
+                    float z = reader.ReadSingle();
+                    pack.ctrs[i] = new(x, y, z);
+                }
+
+                // 读取毗邻三角形序号数据
+                pack.adjTris = new Tri[adjTrisSize];
+                for (Int32 i = 0; i < adjTrisSize; ++i) {
+                    Int32 t01 = reader.ReadInt32();
+                    Int32 t12 = reader.ReadInt32();
+                    Int32 t20 = reader.ReadInt32();
+                    pack.adjTris[i] = new(t01, t12, t20);
+                }
+
+                Debug.Log($"Resources反序列化成功: {resFilePath}, 顶点数: {vertsSize}, 三角形数: {trisSize}, 毗邻数据数: {abutsSize}, 毗邻三角形中心坐标数: {ctrsSize}, 毗邻三角形序号数: {adjTrisSize}");
                 return pack;
             } catch (Exception e) {
                 Debug.LogError($"反序列化失败: {e.Message}\n{e.StackTrace}");

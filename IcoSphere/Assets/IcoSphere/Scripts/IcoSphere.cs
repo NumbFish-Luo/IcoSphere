@@ -36,9 +36,9 @@ namespace IcoSphere {
             public Vector3 v0;
             public Vector3 v1;
             public Vector3 v2;
-            public Vector3 m01;
-            public Vector3 m12;
-            public Vector3 m20;
+            public Vector3 c01;
+            public Vector3 c12;
+            public Vector3 c20;
             public Vector4 col;
         }
 
@@ -191,17 +191,13 @@ namespace IcoSphere {
             Int32 v1 = t[1];
             Int32 v2 = t[2];
 
-            for (int j = 0; j < 6; ++j) {
-
-            }
-
             return new() {
                 v0 = p.verts[v0] * r,
                 v1 = p.verts[v1] * r,
                 v2 = p.verts[v2] * r,
-                m01 = Vector3.zero,
-                m12 = Vector3.zero,
-                m20 = Vector3.zero,
+                c01 = p.ctrs[i * 3 + 0] * r,
+                c12 = p.ctrs[i * 3 + 1] * r,
+                c20 = p.ctrs[i * 3 + 2] * r,
                 col = Misc.RandomRgb(i)
             };
         }

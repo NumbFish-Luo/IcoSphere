@@ -32,9 +32,9 @@ Shader "Custom/ComputeShader/Tri" {
                 float3 v0;
                 float3 v1;
                 float3 v2;
-                float3 m01;
-                float3 m12;
-                float3 m20;
+                float3 c01;
+                float3 c12;
+                float3 c20;
                 float4 col;
             };
 

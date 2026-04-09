@@ -113,6 +113,7 @@ namespace IcoSphere {
 
                 // 推算毗邻数据
                 pack.CalcAbuts();
+                pack.CalcCtrs();
 
                 // 保存二进制文件
                 pack.Save(GetFilePath(0).c_str());
@@ -160,7 +161,8 @@ namespace IcoSphere {
 
                 pack.tris = move(trisNew);
                 pack.CalcAbuts();
-                pack.Save(GetFilePath(readRecursion + 1).c_str());
+                pack.CalcCtrs();
+                pack.Save(GetFilePath(i + 1).c_str());
             }
 
             return pack;
