@@ -51,6 +51,10 @@ namespace IcoSphere {
             }
         }
 
+        Abut operator[](int32_t v) {
+            return abuts[v];
+        }
+
         bool Push(int32_t v, int32_t t) {
             if (abuts.contains(v)) {
                 return abuts[v].Push(t);

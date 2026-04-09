@@ -1,9 +1,12 @@
 #pragma kernel TriCullInstances
 
 struct InstanceData {
+    float3 v0;
     float3 v1;
     float3 v2;
-    float3 v3;
+    float3 m01;
+    float3 m12;
+    float3 m20;
     float4 col;
 };
 
@@ -45,11 +48,11 @@ void TriCullInstances(uint3 id : SV_DispatchThreadID) {
 
 #define DO_CULL
 #ifdef DO_CULL
-    float3 p = (data.v1 + data.v2 + data.v3) / 3.0f;
+    float3 p = (data.v0 + data.v1 + data.v2) / 3.0f;
+    float l01 = length(data.v0 - data.v1);
     float l12 = length(data.v1 - data.v2);
-    float l23 = length(data.v2 - data.v3);
-    float l31 = length(data.v3 - data.v1);
-    float r = max(max(l12, l23), l31) * 0.5f;
+    float l20 = length(data.v2 - data.v0);
+    float r = max(max(l01, l12), l20) * 0.5f;
     if (IsInFrustum(p, _InstanceRadius * r)) {
         _VisibleInstancesData.Append(data);
     }

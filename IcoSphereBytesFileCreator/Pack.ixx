@@ -9,6 +9,7 @@ import <string>;
 import <fstream>;
 import Math.Vec3;
 import Mesh.Tri;
+import Mesh.Abut;
 import IcoSphere.HexAbuts;
 
 using std::cout;
@@ -21,6 +22,7 @@ using std::ifstream;
 using std::ofstream;
 using Math::Vec3;
 using Mesh::Tri;
+using Mesh::Abut;
 
 namespace IcoSphere {
     export class Pack {
@@ -47,6 +49,7 @@ namespace IcoSphere {
         vector<Vec3> verts;
         vector<Tri> tris;
         vector<HexAbuts> abuts; // 数量与verts一致
+        vector<Vec3> ctrs; // 毗邻三角形中心坐标数组, 数量为verts的三倍, ctr是center的缩写
 
         // 推算毗邻数据
         void CalcAbuts() {
@@ -75,6 +78,44 @@ namespace IcoSphere {
             }
 
             AbutsToData();
+        }
+
+        // 推算毗邻三角形中心点坐标, 需要在准备好abuts之后才能执行
+        void CalcCtrs() {
+            size_t nv = verts.size();
+            size_t nt = tris.size();
+            ctrs = vector<Vec3>(nv * 3);
+            for (int32_t t = 0; t < nt; ++t) {
+                // 先获取目标三角形
+                const Tri& tt = tris[t];
+                // 获取顶点序号
+                int32_t v0 = tt[0];
+                int32_t v1 = tt[1];
+                int32_t v2 = tt[2];
+                // 获取相应的毗邻数据
+                Abut a01 = abuts[v0][v1];
+                Abut a12 = abuts[v1][v2];
+                Abut a20 = abuts[v2][v0];
+                // 查找到对应的毗邻三角形
+                // -----v0----
+                // \t20/ \t01/
+                //  \ / t \ /
+                //  v2-----v1
+                //    \t12/
+                //     \ /
+                int32_t t01 = a01[0];
+                if (t01 == t) {
+                    t01 = a01[1];
+                }
+                int32_t t12 = a12[0];
+                if (t12 == t) {
+                    t12 = a12[1];
+                }
+                int32_t t20 = a20[0];
+                if (t20 == t) {
+                    t20 = a20[1];
+                }
+            }
         }
 
         string AbutsToStr() const {

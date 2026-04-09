@@ -29,9 +29,12 @@ Shader "Custom/ComputeShader/Tri" {
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             struct InstanceData {
+                float3 v0;
                 float3 v1;
                 float3 v2;
-                float3 v3;
+                float3 m01;
+                float3 m12;
+                float3 m20;
                 float4 col;
             };
 
@@ -70,13 +73,13 @@ Shader "Custom/ComputeShader/Tri" {
 
                 // 将实例的位置应用到模型的顶点上
                 float3 p = 0.0;
+                float3 v0 = data.v0;
                 float3 v1 = data.v1;
                 float3 v2 = data.v2;
-                float3 v3 = data.v3;
                 switch(i.id) {
-                case 0: p = v1; break;
-                case 1: p = v2; break;
-                case 2: p = v3; break;
+                case 0: p = v0; break;
+                case 1: p = v1; break;
+                case 2: p = v2; break;
                 }
 
             // #define TEST_PLAY_ANIM
@@ -87,7 +90,7 @@ Shader "Custom/ComputeShader/Tri" {
                 float3x3 r = float3x3(c, -s, 0,
                                       s,  c, 0,
                                       0,  0, 1);
-                float3 p0 = (v1 + v2 + v3) / 3.0;
+                float3 p0 = (v0 + v1 + v2) / 3.0;
                 p = p0 + mul(r, p - p0);
             #endif
 
