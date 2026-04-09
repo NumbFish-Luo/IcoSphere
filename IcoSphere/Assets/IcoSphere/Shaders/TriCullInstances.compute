@@ -4,9 +4,9 @@ struct InstanceData {
     float3 v0;
     float3 v1;
     float3 v2;
-    float3 c01;
-    float3 c12;
-    float3 c20;
+    float4 c01;
+    float4 c12;
+    float4 c20;
     float4 col;
 };
 

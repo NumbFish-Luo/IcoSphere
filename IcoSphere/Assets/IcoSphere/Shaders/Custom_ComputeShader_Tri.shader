@@ -2,6 +2,7 @@ Shader "Custom/ComputeShader/Tri" {
     Properties {
         _BaseMap ("Base Map", 2D) = "white" {}
         _BaseColor ("Base Color", Color) = (1, 1, 1, 1)
+        _LineWidth ("Line Width", Float) = 0.00005
     }
     SubShader {
         Tags {
@@ -32,9 +33,9 @@ Shader "Custom/ComputeShader/Tri" {
                 float3 v0;
                 float3 v1;
                 float3 v2;
-                float3 c01;
-                float3 c12;
-                float3 c20;
+                float4 c01;
+                float4 c12;
+                float4 c20;
                 float4 col;
             };
 
@@ -42,7 +43,6 @@ Shader "Custom/ComputeShader/Tri" {
 
             struct Attributes {
                 float4 vertex : POSITION;
-                float3 normal : NORMAL;
                 float2 uv : TEXCOORD0;
                 uint id : SV_VertexID;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
@@ -52,11 +52,12 @@ Shader "Custom/ComputeShader/Tri" {
                 float4 vertex : SV_POSITION;
                 float4 color : COLOR;
                 float2 uv : TEXCOORD0;
-                float3 worldPos : TEXCOORD1;
-                nointerpolation float3 ctr : TEXCOORD2; // 当前三角形中心
-                nointerpolation float3 c01 : TEXCOORD3;
-                nointerpolation float3 c12 : TEXCOORD4;
-                nointerpolation float3 c20 : TEXCOORD5;
+                float3 posWS : TEXCOORD1;
+                float3 normal : TEXCOORD2;
+                nointerpolation float3 ctr : TEXCOORD3; // 当前三角形中心
+                nointerpolation float4 c01 : TEXCOORD4;
+                nointerpolation float4 c12 : TEXCOORD5;
+                nointerpolation float4 c20 : TEXCOORD6;
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -66,7 +67,13 @@ Shader "Custom/ComputeShader/Tri" {
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseMap_ST;
                 half4 _BaseColor;
+                float _LineWidth;
             CBUFFER_END
+
+            // 将p投影到平面上, 已知这个平面的法线n, 以及这个平面上的一个点q
+            float3 ProjToNormalPlane(float3 n, float3 p, float3 q) {
+                return p - n * dot(n, p - q) / dot(n, n);
+            }
 
             Varyings vert(Attributes i, uint id : SV_InstanceID) {
                 Varyings o = (Varyings)0;
@@ -87,15 +94,17 @@ Shader "Custom/ComputeShader/Tri" {
                 case 2: p = v2; break;
                 }
 
-                o.worldPos = p;
+                o.posWS = p;
                 o.ctr = (v0 + v1 + v2) / 3.0;
-                o.c01 = data.c01;
-                o.c12 = data.c12;
-                o.c20 = data.c20;
+                o.normal = normalize(cross(v1 - v0, v2 - v0)); // 3点确定法线
 
-                i.vertex.xyz = p;
+                // 需要将毗邻三角形中心坐标投影到当前法线平面上, frag中才能正确渲染3d线条, 否则可能会嵌入球体里面
+                o.c01 = float4(ProjToNormalPlane(o.normal, data.c01.xyz, o.ctr), data.c01.w);
+                o.c12 = float4(ProjToNormalPlane(o.normal, data.c12.xyz, o.ctr), data.c12.w);
+                o.c20 = float4(ProjToNormalPlane(o.normal, data.c20.xyz, o.ctr), data.c20.w);
 
                 // 转换到裁剪空间
+                i.vertex.xyz = p;
                 o.vertex = TransformWorldToHClip(i.vertex.xyz);
 
                 // 传递其他数据
@@ -130,33 +139,14 @@ Shader "Custom/ComputeShader/Tri" {
 
             half4 frag(Varyings i) : SV_Target {
                 UNITY_SETUP_INSTANCE_ID(i);
-
-                float t = (sin(_Time.y) + 1.0) * 0.5;
-                float4 luv = 0.0;
-                {
-                    const float w = 0.05;
-                    const float a0 = PI * 0.5;
-                    const float a1 = 11.0 * PI / 6.0;
-                    const float a2 = 7.0 * PI / 6.0;
-                    const float2 p0 = 0.0;
-                    float2 uv = i.uv.xy;
-                    float l0 = SmoothLine(uv, p0, float2(cos(a0), -sin(a0)), w);
-                    float l1 = SmoothLine(uv, p0, float2(cos(a1), -sin(a1)), w);
-                    float l2 = SmoothLine(uv, p0, float2(cos(a2), -sin(a2)), w);
-                    luv = saturate(l0 + l1 + l2) * float4(1.0, 0.0, 0.0, 0.5) * t;
-                }
-
-                float4 lwp = 0.0;
-                {
-                    float3 wp = i.worldPos;
-                    float3 ctr = i.ctr;
-                    float w = 0.00005;
-                    float l0 = SmoothLine3d(wp, ctr, i.c01, w);
-                    float l1 = SmoothLine3d(wp, ctr, i.c12, w);
-                    float l2 = SmoothLine3d(wp, ctr, i.c20, w);
-                    lwp = saturate(l0 + l1 + l2) * float4(0.0, 1.0, 0.0, 0.5) * (1.0 - t);
-                }
-                return saturate(i.color * 0.2 + luv + lwp);
+                float3 wp = i.posWS;
+                float3 ctr = i.ctr;
+                float w = _LineWidth;
+                float l0 = SmoothLine3d(wp, ctr, i.c01.xyz, w);
+                float l1 = SmoothLine3d(wp, ctr, i.c12.xyz, w);
+                float l2 = SmoothLine3d(wp, ctr, i.c20.xyz, w);
+                float l = saturate(l0 + l1 + l2);
+                return lerp(i.color * 0.5, 0.0, l);
             }
             ENDHLSL
         }
