@@ -27,16 +27,17 @@ namespace IcoSphere {
 
         // 对于单个三角形, 需要知道的信息有3个顶点坐标值, 还有毗邻的3个三角形中心坐标值
         // -----v0----
-        // \m20/ \m01/
+        // \c20/ \c01/
         //  \ / t \ /
         //  v2-----v1
-        //    \m12/
+        //    \c12/
         //     \ /
+        // 然后为了最大化利用数据, xyz对应具体坐标, w对应序号(Int32)
         [StructLayout(LayoutKind.Sequential)]
         private struct InstanceData {
-            public Vector3 v0;
-            public Vector3 v1;
-            public Vector3 v2;
+            public Vector4 v0;
+            public Vector4 v1;
+            public Vector4 v2;
             public Vector4 c01;
             public Vector4 c12;
             public Vector4 c20;
@@ -194,14 +195,17 @@ namespace IcoSphere {
             Int32 v0 = t[0];
             Int32 v1 = t[1];
             Int32 v2 = t[2];
+            Vector3 p0 = p.verts[v0] * r;
+            Vector3 p1 = p.verts[v1] * r;
+            Vector3 p2 = p.verts[v2] * r;
             Vector3 c01 = p.ctrs[i * 3 + 0] * r;
             Vector3 c12 = p.ctrs[i * 3 + 1] * r;
             Vector3 c20 = p.ctrs[i * 3 + 2] * r;
 
             return new() {
-                v0 = p.verts[v0] * r,
-                v1 = p.verts[v1] * r,
-                v2 = p.verts[v2] * r,
+                v0 = new Vector4(p0.x, p0.y, p0.z, v0),
+                v1 = new Vector4(p1.x, p1.y, p1.z, v1),
+                v2 = new Vector4(p2.x, p2.y, p2.z, v2),
                 c01 = new Vector4(c01.x, c01.y, c01.z, p.adjTris[i][0]),
                 c12 = new Vector4(c12.x, c12.y, c12.z, p.adjTris[i][1]),
                 c20 = new Vector4(c20.x, c20.y, c20.z, p.adjTris[i][2]),
