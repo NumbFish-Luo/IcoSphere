@@ -1,8 +1,8 @@
 Shader "Custom/ComputeShader/Tri" {
     Properties {
         _BaseMap ("Base Map", 2D) = "white" {}
-        _BaseColor ("Base Color", Color) = (1, 1, 1, 1)
-        _LineWidth ("Line Width", Float) = 0.00005
+        _BaseColor ("Base Color", Color) = (1.0, 1.0, 1.0, 1.0)
+        _LineWidth ("Line Width", Float) = 0.0003
     }
     SubShader {
         Tags {
@@ -164,11 +164,11 @@ Shader "Custom/ComputeShader/Tri" {
             }
 
             float3 RandomRgb(uint i) {
-                float3 col;
-                col.r = IntToRandom(i, 11) / 255.0;
-                col.g = IntToRandom(i, 45) / 255.0;
-                col.b = IntToRandom(i, 14) / 255.0;
-                return col;
+                return float3(
+                    IntToRandom(i, 11),
+                    IntToRandom(i, 45),
+                    IntToRandom(i, 14)
+                ) / 255.0;
             }
 
             half4 frag(Varyings i) : SV_Target {
@@ -180,6 +180,7 @@ Shader "Custom/ComputeShader/Tri" {
                 float l1 = SmoothLine3d(p, o, i.c12.xyz, w);
                 float l2 = SmoothLine3d(p, o, i.c20.xyz, w);
                 float l = saturate(l0 + l1 + l2);
+                float4 colLine = 0.0;
 
                 float4 col = 1.0;
                 uint vid = i.vid.x;
@@ -190,7 +191,7 @@ Shader "Custom/ComputeShader/Tri" {
                 }
                 col.rgb = RandomRgb(vid);
 
-                return lerp(col * 0.5, 0.0, l);
+                return lerp(col * 0.5, colLine, l);
             }
             ENDHLSL
         }

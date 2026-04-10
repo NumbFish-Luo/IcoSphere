@@ -25,6 +25,8 @@ namespace IcoSphere {
         private float instanceRadius;
         private readonly uint[] args = new uint[5] { 0, 0, 0, 0, 0 };
 
+        public float SphereRadius => sphereRadius;
+
         // 对于单个三角形, 需要知道的信息有3个顶点坐标值, 还有毗邻的3个三角形中心坐标值
         // -----v0----
         // \c20/ \c01/
@@ -76,7 +78,7 @@ namespace IcoSphere {
                 Bounds renderBounds = new(cameraPos, new Vector3(maxDistance * 2, maxDistance * 2, maxDistance * 2));
 
                 // 材质参数设置
-                mat.SetFloat("_LineWidth", lineWidth);
+                mat.SetFloat("_LineWidth", lineWidth * sphereRadius);
 
                 Graphics.DrawMeshInstancedIndirect(
                     mesh: mesh,
