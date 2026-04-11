@@ -2,6 +2,7 @@ Shader "Custom/ComputeShader/Tri" {
     Properties {
         _BaseMap ("Base Map", 2D) = "white" {}
         _BaseColor ("Base Color", Color) = (1.0, 1.0, 1.0, 1.0)
+        _Radius ("Radius", Float) = 1.0
         _LineWidth ("Line Width", Float) = 0.0003
     }
     SubShader {
@@ -69,6 +70,7 @@ Shader "Custom/ComputeShader/Tri" {
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseMap_ST;
                 half4 _BaseColor;
+                float _Radius;
                 float _LineWidth;
             CBUFFER_END
 
@@ -155,7 +157,7 @@ Shader "Custom/ComputeShader/Tri" {
                 return step(0.0, alpha) * step(0.0, beta);
             }
 
-            uint IntToRandom(uint x, uint seed) {
+            uint Random255(uint x, uint seed) {
                 uint hash = x * 0x9e3779b9u + seed;
                 hash = (hash ^ (hash >> 15)) * 0x85ebca6bu;
                 hash = (hash ^ (hash >> 13)) * 0xc2b2ae35u;
@@ -165,10 +167,18 @@ Shader "Custom/ComputeShader/Tri" {
 
             float3 RandomRgb(uint i) {
                 return float3(
-                    IntToRandom(i, 11),
-                    IntToRandom(i, 45),
-                    IntToRandom(i, 14)
+                    Random255(i, 11),
+                    Random255(i, 45),
+                    Random255(i, 14)
                 ) / 255.0;
+            }
+
+            // 世界坐标转经纬度
+            // 经度 (Longitude): (-1.0, 1.0] * pi
+            // 纬度  (Latitude): (-0.5, 0.5] * pi
+            float2 ToLonLat(float3 p) {
+                p = normalize(p);
+                return float2(atan2(p.y, p.x), asin(p.z));
             }
 
             half4 frag(Varyings i) : SV_Target {

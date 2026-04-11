@@ -78,6 +78,7 @@ namespace IcoSphere {
                 Bounds renderBounds = new(cameraPos, new Vector3(maxDistance * 2, maxDistance * 2, maxDistance * 2));
 
                 // 材质参数设置
+                mat.SetFloat("_Radius", sphereRadius);
                 mat.SetFloat("_LineWidth", lineWidth * sphereRadius);
 
                 Graphics.DrawMeshInstancedIndirect(

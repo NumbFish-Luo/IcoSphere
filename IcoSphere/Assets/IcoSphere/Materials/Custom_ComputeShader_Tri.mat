@@ -30,6 +30,7 @@ Material:
     m_Ints: []
     m_Floats:
     - _LineWidth: 0.015000001
+    - _Radius: 50
     m_Colors:
     - _BaseColor: {r: 1, g: 1, b: 1, a: 1}
   m_BuildTextureStacks: []
