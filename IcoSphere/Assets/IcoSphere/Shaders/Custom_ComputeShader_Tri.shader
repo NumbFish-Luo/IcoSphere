@@ -2,6 +2,7 @@ Shader "Custom/ComputeShader/Tri" {
     Properties {
         _BaseMap ("Base Map", 2D) = "white" {}
         _BaseColor ("Base Color", Color) = (1.0, 1.0, 1.0, 1.0)
+        _TerrainTest ("Terrain Test", 2D) = "white" {}
         _Radius ("Radius", Float) = 1.0
         _LineWidth ("Line Width", Float) = 0.0003
     }
@@ -66,6 +67,8 @@ Shader "Custom/ComputeShader/Tri" {
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
+            TEXTURE2D(_TerrainTest);
+            SAMPLER(sampler_TerrainTest);
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseMap_ST;
@@ -173,12 +176,83 @@ Shader "Custom/ComputeShader/Tri" {
                 ) / 255.0;
             }
 
+            // 三角波: (0, 0) ~ (1, 1) ~ (2, 0) ~ (3, 1)
+            float TriWave(float x) {
+                return abs(2.0 * (x * 0.5 - floor(0.5 + x * 0.5)));
+            }
+
             // 世界坐标转经纬度
             // 经度 (Longitude): (-1.0, 1.0] * pi
             // 纬度  (Latitude): (-0.5, 0.5] * pi
             float2 ToLonLat(float3 p) {
                 p = normalize(p);
                 return float2(atan2(p.y, p.x), asin(p.z));
+            }
+
+            // 外接立方体
+            float3 UnitCubeToSpherePos(float3 p) {
+                return normalize(p);
+            }
+
+            // 球体坐标转外接立方体坐标
+            float3 UnitSphereToCubePos(float3 p) {
+                p = normalize(p);
+                return p / max(max(abs(p.x), abs(p.y)), abs(p.z));
+            }
+
+            float Equal(float a, float b) {
+                return 1.0 - step(0.00001, abs(a - b));
+            }
+
+            // 获取此点所在的立方体面
+            // x方向面: -1.0 or 1.0
+            // y方向面: -2.0 or 2.0
+            // z方向面: -3.0 or 3.0
+            float GetCubeFace(float3 p) {
+                p = normalize(p);
+                float3 ap = abs(p);
+                float3 sp = sign(p);
+                float m = max(max(ap.x, ap.y), ap.z);
+                float3 e = float3(Equal(ap.x, m), Equal(ap.y, m), Equal(ap.z, m));
+                if (e.x > 0.0) {
+                    return sp.x * 1.0;
+                } else if (e.y > 0.0) {
+                    return sp.y * 2.0;
+                } else if (e.z > 0.0) {
+                    return sp.z * 3.0;
+                }
+                return 0.0;
+            }
+
+            float4 FracCubeGrid(float3 p) {
+                p = UnitSphereToCubePos(p) * _Radius;
+                return float4(frac(p.x), frac(p.y), frac(p.z), 1.0);
+            }
+
+            float2 UvCubeGridFace(float3 p) {
+                float2 uv = 0.0;
+                float face = GetCubeFace(p);
+                float absFace = abs(face);
+                p = UnitSphereToCubePos(p);
+                if (Equal(absFace, 1.0)) { // x face
+                    uv = p.yz;
+                } else if (Equal(absFace, 2.0)) { // y face
+                    uv = p.xz;
+                } else if (Equal(absFace, 3.0)) { // z face
+                    uv = p.xy;
+                }
+                return (uv + 1.0) * 0.5;
+            }
+
+            float4 TriWaveCubeGrid(float3 p) {
+                p = UnitSphereToCubePos(p) * _Radius;
+                return float4(TriWave(p.x), TriWave(p.y), TriWave(p.z), 1.0);
+            }
+
+            float4 TerrainTest(float3 p) {
+                float4 col = 0.0;
+                p = UnitSphereToCubePos(p) * _Radius;
+                return col;
             }
 
             half4 frag(Varyings i) : SV_Target {
@@ -200,8 +274,17 @@ Shader "Custom/ComputeShader/Tri" {
                     vid = i.vid.z;
                 }
                 col.rgb = RandomRgb(vid);
+                col = lerp(col * 0.5, colLine, l);
 
-                return lerp(col * 0.5, colLine, l);
+                float4 colCubeGrid = TriWaveCubeGrid(p);
+                float4 colTerrainTest = TerrainTest(p);
+                float cubeFace = (GetCubeFace(p) + 3.0) / 6.0;
+                float2 uvCubeGridFace = UvCubeGridFace(p);
+
+                float t = 1.0; // (sin(_Time.y) + 1.0) * 0.5;
+                col = lerp(col, cubeFace, t);
+
+                return col;
             }
             ENDHLSL
         }
