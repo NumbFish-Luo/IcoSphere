@@ -5,8 +5,6 @@ using UnityEngine;
 namespace IcoSphere {
     // 杂项工具
     public static class Misc {
-        public readonly static float GOLDEN_RATIO = (1.0f + Mathf.Sqrt(5.0f)) * 0.5f;
-
         public static uint IntToRandom(uint x, uint seed) {
             uint hash = x * 0x9e3779b9u + seed;
             hash = (hash ^ (hash >> 15)) * 0x85ebca6bu;
@@ -49,6 +47,13 @@ namespace IcoSphere {
                 dict.Add(getK(aa), getV(aa));
             }
             return dict;
+        }
+
+        public static void KillAllChildren(this Transform tf) {
+            int n = tf.childCount;
+            for (int i = 0; i < n; ++i) {
+                UnityEngine.Object.Destroy(tf.GetChild(i).gameObject);
+            }
         }
     }
 }

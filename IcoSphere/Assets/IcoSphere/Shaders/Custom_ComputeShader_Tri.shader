@@ -2,7 +2,9 @@ Shader "Custom/ComputeShader/Tri" {
     Properties {
         _BaseMap ("Base Map", 2D) = "white" {}
         _BaseColor ("Base Color", Color) = (1.0, 1.0, 1.0, 1.0)
-        _TerrainTest ("Terrain Test", 2D) = "white" {}
+        _TerrainTestD ("Terrain Test D", 2D) = "white" {}
+        _TerrainTestH ("Terrain Test H", 2D) = "white" {}
+        _TerrainTestM ("Terrain Test M", 2D) = "white" {}
         _Radius ("Radius", Float) = 1.0
         _LineWidth ("Line Width", Float) = 0.0003
     }
@@ -67,8 +69,12 @@ Shader "Custom/ComputeShader/Tri" {
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
-            TEXTURE2D(_TerrainTest);
-            SAMPLER(sampler_TerrainTest);
+            TEXTURE2D(_TerrainTestD);
+            SAMPLER(sampler_TerrainTestD);
+            TEXTURE2D(_TerrainTestH);
+            SAMPLER(sampler_TerrainTestH);
+            TEXTURE2D(_TerrainTestM);
+            SAMPLER(sampler_TerrainTestM);
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseMap_ST;
@@ -229,7 +235,7 @@ Shader "Custom/ComputeShader/Tri" {
                 return float4(frac(p.x), frac(p.y), frac(p.z), 1.0);
             }
 
-            float2 UvCubeGridFace(float3 p) {
+            float2 UvCubeFace(float3 p) {
                 float2 uv = 0.0;
                 float face = GetCubeFace(p);
                 float absFace = abs(face);
@@ -250,9 +256,11 @@ Shader "Custom/ComputeShader/Tri" {
             }
 
             float4 TerrainTest(float3 p) {
-                float4 col = 0.0;
-                p = UnitSphereToCubePos(p) * _Radius;
-                return col;
+                float2 uv = UvCubeFace(p);
+                uv = frac(uv * 10.0);
+                float2 uvD = (uv - 0.5) * 2.0 + 0.5;
+                float4 colD = SAMPLE_TEXTURE2D(_TerrainTestD, sampler_TerrainTestD, uvD);
+                return colD;
             }
 
             half4 frag(Varyings i) : SV_Target {
@@ -276,13 +284,12 @@ Shader "Custom/ComputeShader/Tri" {
                 col.rgb = RandomRgb(vid);
                 col = lerp(col * 0.5, colLine, l);
 
+            // #define SHOW_GRID
+            #ifdef SHOW_GRID
                 float4 colCubeGrid = TriWaveCubeGrid(p);
-                float4 colTerrainTest = TerrainTest(p);
-                float cubeFace = (GetCubeFace(p) + 3.0) / 6.0;
-                float2 uvCubeGridFace = UvCubeGridFace(p);
-
-                float t = 1.0; // (sin(_Time.y) + 1.0) * 0.5;
-                col = lerp(col, cubeFace, t);
+                float t = (sin(_Time.y) + 1.0) * 0.5;
+                col = lerp(col, colCubeGrid, t);
+            #endif
 
                 return col;
             }
