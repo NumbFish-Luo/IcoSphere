@@ -45,6 +45,7 @@ Shader "Custom/ComputeShader/Tri" {
             };
 
             StructuredBuffer<InstanceData> _VisibleInstancesData;
+            StructuredBuffer<InstanceData> _RayCastData;
 
             struct Attributes {
                 float4 vertex : POSITION;

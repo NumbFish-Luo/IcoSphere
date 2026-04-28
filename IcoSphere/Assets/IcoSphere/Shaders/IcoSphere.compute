@@ -1,0 +1,138 @@
+#pragma kernel Cull
+#pragma kernel Ray
+
+struct InstanceData {
+    float4 v0;
+    float4 v1;
+    float4 v2;
+    float4 c01;
+    float4 c12;
+    float4 c20;
+    float4 col;
+};
+
+// input: Common
+StructuredBuffer<InstanceData> _AllInstancesData;
+uint _MaxNum;
+
+// input: Cull
+float4 _FrustumPlanes[6];
+float _MaxDistance;
+float3 _CamPos;
+float _InstanceRadius;
+
+// input: Ray
+float3 _RayOrigin;
+float3 _RayDir;
+
+// output: Cull
+AppendStructuredBuffer<InstanceData> _VisibleInstancesData;
+
+// output: Ray
+AppendStructuredBuffer<InstanceData> _RayCastData;
+
+// 剔除算法
+bool IsVisible(float3 worldPos, float3 normal, float radius) {
+    // 距离剔除
+    if (distance(worldPos, _CamPos) > _MaxDistance) {
+        return false;
+    }
+
+    // 视锥剔除
+    for (int i = 0; i < 6; ++i) {
+        // dot(plane.xyz, pos) + plane.w 计算点到平面的垂直距离
+        if (dot(_FrustumPlanes[i].xyz, worldPos) + _FrustumPlanes[i].w + radius < 0) {
+            return false;
+        }
+    }
+
+    // 背面剔除: 法线朝向相机才保留
+    float3 toCamera = normalize(_CamPos - worldPos);
+    if (dot(normal, toCamera) <= 0.0) {
+        return false;
+    }
+
+    return true;
+}
+
+// Möller-Trumbore算法
+// 射线: 起点ro，方向rd (需归一化)
+// 三角形顶点: v0, v1, v2
+// 输出: 交点参数t (射线起点到交点的距离), 重心坐标uv.x和uv.y (uv.z = 1 - uv.x - uv.y)
+// 返回: 是否相交
+bool RayTriIntersect(float3 ro, float3 rd, float3 v0, float3 v1, float3 v2, out float t, out float2 uv) {
+    const float EPS = 1e-6;
+
+    float3 e1 = v1 - v0;
+    float3 e2 = v2 - v0;
+    float3 h = cross(rd, e2);
+    float a = dot(e1, h);
+
+    // 射线与三角形平面平行
+    if (abs(a) < EPS) {
+        return false;
+    }
+
+    float f = 1.0 / a;
+    float3 s = ro - v0;
+    float u = f * dot(s, h);
+    if (u < 0.0 || u > 1.0) {
+        return false;
+    }
+
+    float3 q = cross(s, e1);
+    float v = f * dot(rd, q);
+    if (v < 0.0 || u + v > 1.0) {
+        return false;
+    }
+
+    t = f * dot(e2, q);
+    // 交点在射线反方向
+    if (t < EPS) {
+        return false;
+    }
+    uv = float2(u, v);
+    return true;
+}
+
+[numthreads(64, 1, 1)]
+void Cull(uint3 id : SV_DispatchThreadID) {
+    uint i = id.x;
+    if (i >= _MaxNum) {
+        return;
+    }
+
+    InstanceData data = _AllInstancesData[i];
+
+    float3 v0 = data.v0.xyz;
+    float3 v1 = data.v1.xyz;
+    float3 v2 = data.v2.xyz;
+    float3 p = (v0 + v1 + v2) / 3.0f;
+    float3 n = normalize(cross(v1 - v0, v2 - v0)); // 3点确定法线
+    float l01 = length(v0 - v1);
+    float l12 = length(v1 - v2);
+    float l20 = length(v2 - v0);
+    float r = _InstanceRadius * max(max(l01, l12), l20) * 0.5f;
+    if (IsVisible(p, n, r)) {
+        _VisibleInstancesData.Append(data);
+    }
+}
+
+[numthreads(64, 1, 1)]
+void Ray(uint3 id : SV_DispatchThreadID) {
+    uint i = id.x;
+    if (i >= _MaxNum) {
+        return;
+    }
+
+    InstanceData data = _AllInstancesData[i];
+    float3 v0 = data.v0.xyz;
+    float3 v1 = data.v1.xyz;
+    float3 v2 = data.v2.xyz;
+    float outT;
+    float2 outUv;
+
+    if (RayTriIntersect(_RayOrigin, _RayDir, v0, v1, v2, outT, outUv)) {
+        _RayCastData.Append(data);
+    }
+}

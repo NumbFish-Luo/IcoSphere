@@ -19,9 +19,12 @@ namespace IcoSphere {
         private int triNum;
         private ComputeBuffer allBuf;
         private ComputeBuffer visibleBuf;
+        private ComputeBuffer rayBuf;
         private ComputeBuffer argsBuf;
-        private const string kernelName = "TriCullInstances";
-        private int kernel;
+        private const string kNameCull = "Cull";
+        private const string kNameRay = "Ray";
+        private int kiCull;
+        private int kiRay;
         private float instanceRadius;
         private readonly uint[] args = new uint[5] { 0, 0, 0, 0, 0 };
 
@@ -60,22 +63,22 @@ namespace IcoSphere {
             }
             try {
                 Plane[] frustumPlanes = GeometryUtility.CalculateFrustumPlanes(cam);
+                Vector3 camPos = cam.transform.position;
                 computeShader.SetVectorArray("_FrustumPlanes", PlanesToVector4(frustumPlanes));
                 computeShader.SetFloat("_MaxDistance", cam.farClipPlane);
-                computeShader.SetMatrix("_CameraLocalToWorld", cam.transform.localToWorldMatrix);
+                computeShader.SetVector("_CamPos", camPos);
                 computeShader.SetFloat("_InstanceRadius", instanceRadius);
                 computeShader.SetInt("_MaxNum", triNum);
 
                 // 执行剔除
                 visibleBuf.SetCounterValue(0);
                 int threadGroups = Mathf.CeilToInt(triNum / 64.0f);
-                computeShader.Dispatch(kernel, threadGroups, 1, 1);
+                computeShader.Dispatch(kiCull, threadGroups, 1, 1);
                 ComputeBuffer.CopyCount(visibleBuf, argsBuf, sizeof(uint));
 
                 // 使用足够大的包围盒，确保所有相机都能看到
-                Vector3 cameraPos = cam.transform.position;
                 float maxDistance = cam.farClipPlane;
-                Bounds renderBounds = new(cameraPos, new Vector3(maxDistance * 2, maxDistance * 2, maxDistance * 2));
+                Bounds renderBounds = new(camPos, new Vector3(maxDistance * 2, maxDistance * 2, maxDistance * 2));
 
                 // 材质参数设置
                 mat.SetFloat("_Radius", sphereRadius);
@@ -94,6 +97,13 @@ namespace IcoSphere {
                     layer: 0,
                     camera: null // 不指定相机，让Unity自动处理
                 );
+
+                // 射线检测
+                //rayBuf.SetCounterValue(0);
+                //Ray ray = cam.ScreenPointToRay(Input.mousePosition);
+                //computeShader.SetVector("_RayOrigin", ray.origin);
+                //computeShader.SetVector("_RayDir", ray.direction);
+                //computeShader.Dispatch(kiRay, threadGroups, 1, 1);
             } catch (Exception e) {
                 Debug.LogError($"Update error: {e.Message}");
             }
@@ -166,21 +176,36 @@ namespace IcoSphere {
             allBuf = ComputeBufManager.NewBuf(n, stride, ComputeBufferType.Default);
             allBuf.SetData(data);
             visibleBuf = ComputeBufManager.NewBuf(n, stride, ComputeBufferType.Append);
+            rayBuf = ComputeBufManager.NewBuf(n, stride, ComputeBufferType.Append);
             argsBuf = ComputeBufManager.NewBuf(1, args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
-            args[0] = mesh.GetIndexCount(0);
-            args[1] = 0;
-            args[2] = mesh.GetIndexStart(0);
-            args[3] = mesh.GetBaseVertex(0);
-            args[4] = 0;
+            args[0] = mesh.GetIndexCount(0); // Index Count Per Instance
+            args[1] = 0; // Instance Count
+            args[2] = mesh.GetIndexStart(0); // Start Index Location
+            args[3] = mesh.GetBaseVertex(0); // Base Vertex Location
+            args[4] = 0; // Start Instance Location
             argsBuf.SetData(args);
 
-            kernel = computeShader.FindKernel(kernelName);
-            if (kernel < 0) {
-                throw new Exception("Failed to find kernel '" + kernelName + "'");
+            kiCull = computeShader.FindKernel(kNameCull);
+            if (kiCull < 0) {
+                throw new Exception("Failed to find kernel '" + kNameCull + "'");
             }
-            computeShader.SetBuffer(kernel, "_AllInstancesData", allBuf);
-            computeShader.SetBuffer(kernel, "_VisibleInstancesData", visibleBuf);
+
+            kiRay = computeShader.FindKernel(kNameRay);
+            if (kiRay < 0) {
+                throw new Exception("Failed to find kernel '" + kNameRay + "'");
+            }
+
+            // 输入
+            computeShader.SetBuffer(kiCull, "_AllInstancesData", allBuf);
+            computeShader.SetBuffer(kiRay, "_AllInstancesData", allBuf);
+
+            // 输出
+            computeShader.SetBuffer(kiCull, "_VisibleInstancesData", visibleBuf);
             mat.SetBuffer("_VisibleInstancesData", visibleBuf);
+
+            computeShader.SetBuffer(kiRay, "_RayCastData", rayBuf);
+            mat.SetBuffer("_RayCastData", rayBuf);
+
             Debug.Log($"Buffers created successfully: {n} instances");
         }
 
@@ -225,6 +250,11 @@ namespace IcoSphere {
             if (visibleBuf != null) {
                 ComputeBufManager.ScheduleRelease(visibleBuf);
                 visibleBuf = null;
+            }
+
+            if (rayBuf != null) {
+                ComputeBufManager.ScheduleRelease(rayBuf);
+                rayBuf = null;
             }
 
             if (argsBuf != null) {

@@ -13,10 +13,10 @@ namespace IcoSphere {
         private void Update() {
             if (Math.GetRayResult(icoSphere, cam, out Ray ray, out Vector3 sphereSurfacePoint)) {
                 testSphereSurfacePoint.transform.position = sphereSurfacePoint;
-                Debug.DrawRay(ray.origin, ray.direction * 100.0f, Color.green, 1.0f);
+                Debug.DrawRay(ray.origin, ray.direction * 100.0f, Color.green, 0.5f);
             } else {
                 testSphereSurfacePoint.transform.position = Vector3.zero;
-                Debug.DrawRay(ray.origin, ray.direction * 100.0f, Color.red, 1.0f);
+                Debug.DrawRay(ray.origin, ray.direction * 100.0f, Color.red, 0.5f);
             }
         }
     }
