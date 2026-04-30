@@ -35,6 +35,7 @@ Shader "Custom/ComputeShader/Tri" {
 
             // xyz对应具体坐标, w对应序号
             struct InstanceData {
+                uint id; // 三角形id
                 float4 v0;
                 float4 v1;
                 float4 v2;
@@ -44,8 +45,18 @@ Shader "Custom/ComputeShader/Tri" {
                 float4 col;
             };
 
+            struct RayData {
+                uint tid; // 三角形id
+                uint vid; // 顶点id
+                float3 o; // 射线起点
+                float3 d; // 射线方向
+                float u; // 重心坐标u
+                float v; // 重心坐标v
+                float t; // 射线参数t (交点到原点的距离)
+            };
+
             StructuredBuffer<InstanceData> _VisibleInstancesData;
-            StructuredBuffer<InstanceData> _RayCastData;
+            StructuredBuffer<RayData> _RayResult;
 
             struct Attributes {
                 float4 vertex : POSITION;
@@ -60,11 +71,14 @@ Shader "Custom/ComputeShader/Tri" {
                 float2 uv : TEXCOORD0;
                 float3 posWS : TEXCOORD1;
                 float3 normal : TEXCOORD2;
-                uint3 vid : TEXCOORD3;
-                nointerpolation float3 ctr : TEXCOORD4; // 当前三角形中心
-                nointerpolation float4 c01 : TEXCOORD5;
-                nointerpolation float4 c12 : TEXCOORD6;
-                nointerpolation float4 c20 : TEXCOORD7;
+                nointerpolation float4 v0 : TEXCOORD3;
+                nointerpolation float4 v1 : TEXCOORD4;
+                nointerpolation float4 v2 : TEXCOORD5;
+                nointerpolation float3 ctr : TEXCOORD6; // 当前三角形中心
+                nointerpolation float4 c01 : TEXCOORD7;
+                nointerpolation float4 c12 : TEXCOORD8;
+                nointerpolation float4 c20 : TEXCOORD9;
+                nointerpolation float4 ray : TEXCOORD10; // 射线数据, xy: uv, z: vid, w: 是否击中当前三角形
                 UNITY_VERTEX_INPUT_INSTANCE_ID
             };
 
@@ -103,6 +117,15 @@ Shader "Custom/ComputeShader/Tri" {
                 float3 v1 = data.v1.xyz;
                 float3 v2 = data.v2.xyz;
 
+                // 射线数据
+                RayData ray = _RayResult[0];
+                o.ray.xyz = float3(ray.u, ray.v, ray.vid);
+                if (data.id == ray.tid) {
+                    o.ray.w = 1.0;
+                } else {
+                    o.ray.w = 0.0;
+                }
+
                 switch(i.id) {
                 case 0: p = v0; break;
                 case 1: p = v1; break;
@@ -125,7 +148,9 @@ Shader "Custom/ComputeShader/Tri" {
                 // 传递其他数据
                 o.color = data.col;
                 o.uv = TRANSFORM_TEX(i.uv, _BaseMap);
-                o.vid = uint3(data.v0.w, data.v1.w, data.v2.w);
+                o.v0 = data.v0;
+                o.v1 = data.v1;
+                o.v2 = data.v2;
                 return o;
             }
 
@@ -196,72 +221,8 @@ Shader "Custom/ComputeShader/Tri" {
                 return float2(atan2(p.y, p.x), asin(p.z));
             }
 
-            // 外接立方体
-            float3 UnitCubeToSpherePos(float3 p) {
-                return normalize(p);
-            }
-
-            // 球体坐标转外接立方体坐标
-            float3 UnitSphereToCubePos(float3 p) {
-                p = normalize(p);
-                return p / max(max(abs(p.x), abs(p.y)), abs(p.z));
-            }
-
             float Equal(float a, float b) {
                 return 1.0 - step(0.00001, abs(a - b));
-            }
-
-            // 获取此点所在的立方体面
-            // x方向面: -1.0 or 1.0
-            // y方向面: -2.0 or 2.0
-            // z方向面: -3.0 or 3.0
-            float GetCubeFace(float3 p) {
-                p = normalize(p);
-                float3 ap = abs(p);
-                float3 sp = sign(p);
-                float m = max(max(ap.x, ap.y), ap.z);
-                float3 e = float3(Equal(ap.x, m), Equal(ap.y, m), Equal(ap.z, m));
-                if (e.x > 0.0) {
-                    return sp.x * 1.0;
-                } else if (e.y > 0.0) {
-                    return sp.y * 2.0;
-                } else if (e.z > 0.0) {
-                    return sp.z * 3.0;
-                }
-                return 0.0;
-            }
-
-            float4 FracCubeGrid(float3 p) {
-                p = UnitSphereToCubePos(p) * _Radius;
-                return float4(frac(p.x), frac(p.y), frac(p.z), 1.0);
-            }
-
-            float2 UvCubeFace(float3 p) {
-                float2 uv = 0.0;
-                float face = GetCubeFace(p);
-                float absFace = abs(face);
-                p = UnitSphereToCubePos(p);
-                if (Equal(absFace, 1.0)) { // x face
-                    uv = p.yz;
-                } else if (Equal(absFace, 2.0)) { // y face
-                    uv = p.xz;
-                } else if (Equal(absFace, 3.0)) { // z face
-                    uv = p.xy;
-                }
-                return (uv + 1.0) * 0.5;
-            }
-
-            float4 TriWaveCubeGrid(float3 p) {
-                p = UnitSphereToCubePos(p) * _Radius;
-                return float4(TriWave(p.x), TriWave(p.y), TriWave(p.z), 1.0);
-            }
-
-            float4 TerrainTest(float3 p) {
-                float2 uv = UvCubeFace(p);
-                uv = frac(uv * 10.0);
-                float2 uvD = (uv - 0.5) * 2.0 + 0.5;
-                float4 colD = SAMPLE_TEXTURE2D(_TerrainTestD, sampler_TerrainTestD, uvD);
-                return colD;
             }
 
             half4 frag(Varyings i) : SV_Target {
@@ -276,22 +237,61 @@ Shader "Custom/ComputeShader/Tri" {
                 float4 colLine = 0.0;
 
                 float4 col = 1.0;
-                uint vid = i.vid.x;
+                // 判断当前像素位置
+                // v0.xyz, v1.xyz, v2.xyz为三角形顶点坐标, .w为三角形顶点序号
+                // c01.xyz, c12.xyz, c20.xyz为毗邻三角形中心点坐标, .w为毗邻三角形序号
+                // v0 -> v1: u方向
+                // v0 -> v2: v方向
+                //       v0
+                //       / \
+                // c01--/-o-\--c20
+                //     /  |  \
+                //    v1--+--v2
+                //        |
+                //       c12
+                uint vid = i.v0.w;
                 if (In180Angle(o, i.c01.xyz - o, i.c12.xyz - o, p) > 0.0) {
-                    vid = i.vid.y;
+                    vid = i.v1.w;
                 } else if (In180Angle(o, i.c12.xyz - o, i.c20.xyz - o, p) > 0.0) {
-                    vid = i.vid.z;
+                    vid = i.v2.w;
                 }
                 col.rgb = RandomRgb(vid);
                 col = lerp(col * 0.5, colLine, l);
 
-            // #define SHOW_GRID
-            #ifdef SHOW_GRID
-                float4 colCubeGrid = TriWaveCubeGrid(p);
                 float t = (sin(_Time.y) + 1.0) * 0.5;
-                col = lerp(col, colCubeGrid, t);
-            #endif
 
+                // 射线uv转具体坐标
+                float3 dirU = i.v1.xyz - i.v0.xyz;
+                float3 dirV = i.v2.xyz - i.v0.xyz;
+                float3 rayPos = i.v0.xyz + dirU * i.ray.x + dirV * i.ray.y;
+
+                // (测试) 为当前射线击中的三角形着色
+                float4 rayCol = i.ray * i.ray.w;
+                rayCol.b = 0.0;
+
+                // (测试) 对当前三角形扇区判断并着色, 这个步骤或许要移动到compute shader中
+                if (i.ray.w > 0.0) {
+                    if (In180Angle(o, i.c20.xyz - o, i.c01.xyz - o, rayPos) > 0.0) {
+                        // v0扇区
+                        if (vid == i.v0.w) {
+                            rayCol += 0.5;
+                        }
+                    } else if (In180Angle(o, i.c01.xyz - o, i.c12.xyz - o, rayPos) > 0.0) {
+                        // v1扇区
+                        if (vid == i.v1.w) {
+                            rayCol += 0.5;
+                        }
+                    } else {
+                        // v2扇区
+                        if (vid == i.v2.w) {
+                            rayCol += 0.5;
+                        }
+                    }
+                }
+
+                // (测试) 混合显示射线区域
+                t = 0.9;
+                col = lerp(col, rayCol, t);
                 return col;
             }
             ENDHLSL

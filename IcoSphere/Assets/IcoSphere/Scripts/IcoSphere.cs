@@ -21,10 +21,8 @@ namespace IcoSphere {
         private ComputeBuffer visibleBuf;
         private ComputeBuffer rayBuf;
         private ComputeBuffer argsBuf;
-        private const string kNameCull = "Cull";
-        private const string kNameRay = "Ray";
-        private int kiCull;
-        private int kiRay;
+        private const string kernelName = "Main";
+        private int kernelId;
         private float instanceRadius;
         private readonly uint[] args = new uint[5] { 0, 0, 0, 0, 0 };
 
@@ -40,6 +38,7 @@ namespace IcoSphere {
         // 然后为了最大化利用数据, xyz对应具体坐标, w对应序号(Int32)
         [StructLayout(LayoutKind.Sequential)]
         private struct InstanceData {
+            public uint id; // 三角形id
             public Vector4 v0;
             public Vector4 v1;
             public Vector4 v2;
@@ -48,6 +47,17 @@ namespace IcoSphere {
             public Vector4 c20;
             public Vector4 col;
         }
+
+        [StructLayout(LayoutKind.Sequential)]
+        struct RayData {
+            public uint tid; // 三角形id
+            public uint vid; // 顶点id
+            public Vector3 o; // 射线起点
+            public Vector3 d; // 射线方向
+            public float u; // 重心坐标u
+            public float v; // 重心坐标v
+            public float t; // 射线参数t (交点到原点的距离)
+        };
 
         private void Awake() {
             supportsComputeShaders = CheckSupportsComputeShaders();
@@ -70,10 +80,15 @@ namespace IcoSphere {
                 computeShader.SetFloat("_InstanceRadius", instanceRadius);
                 computeShader.SetInt("_MaxNum", triNum);
 
+                // 射线检测
+                Ray ray = cam.ScreenPointToRay(Input.mousePosition);
+                computeShader.SetVector("_RayOrigin", ray.origin);
+                computeShader.SetVector("_RayDir", ray.direction);
+
                 // 执行剔除
                 visibleBuf.SetCounterValue(0);
                 int threadGroups = Mathf.CeilToInt(triNum / 64.0f);
-                computeShader.Dispatch(kiCull, threadGroups, 1, 1);
+                computeShader.Dispatch(kernelId, threadGroups, 1, 1);
                 ComputeBuffer.CopyCount(visibleBuf, argsBuf, sizeof(uint));
 
                 // 使用足够大的包围盒，确保所有相机都能看到
@@ -97,13 +112,6 @@ namespace IcoSphere {
                     layer: 0,
                     camera: null // 不指定相机，让Unity自动处理
                 );
-
-                // 射线检测
-                //rayBuf.SetCounterValue(0);
-                //Ray ray = cam.ScreenPointToRay(Input.mousePosition);
-                //computeShader.SetVector("_RayOrigin", ray.origin);
-                //computeShader.SetVector("_RayDir", ray.direction);
-                //computeShader.Dispatch(kiRay, threadGroups, 1, 1);
             } catch (Exception e) {
                 Debug.LogError($"Update error: {e.Message}");
             }
@@ -165,18 +173,25 @@ namespace IcoSphere {
             return m;
         }
 
+        private RayData[] NewDefaultRayData() {
+            RayData[] result = new RayData[1];
+            result[0].tid = (uint)triNum;
+            return result;
+        }
+
         private void NewBufs(Pack p) {
             int n = p.tris.Length;
             triNum = n;
             List<InstanceData> data = new(n);
-            for (int i = 0; i < n; ++i) {
+            for (uint i = 0; i < n; ++i) {
                 data.Add(NewInstanceData(p, i));
             }
             int stride = Marshal.SizeOf(typeof(InstanceData));
-            allBuf = ComputeBufManager.NewBuf(n, stride, ComputeBufferType.Default);
+            allBuf = ComputeBufManager.NewBuf(n, stride);
             allBuf.SetData(data);
             visibleBuf = ComputeBufManager.NewBuf(n, stride, ComputeBufferType.Append);
-            rayBuf = ComputeBufManager.NewBuf(n, stride, ComputeBufferType.Append);
+            rayBuf = ComputeBufManager.NewBuf(n, Marshal.SizeOf(typeof(RayData)));
+            rayBuf.SetData(NewDefaultRayData());
             argsBuf = ComputeBufManager.NewBuf(1, args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
             args[0] = mesh.GetIndexCount(0); // Index Count Per Instance
             args[1] = 0; // Instance Count
@@ -185,26 +200,20 @@ namespace IcoSphere {
             args[4] = 0; // Start Instance Location
             argsBuf.SetData(args);
 
-            kiCull = computeShader.FindKernel(kNameCull);
-            if (kiCull < 0) {
-                throw new Exception("Failed to find kernel '" + kNameCull + "'");
-            }
-
-            kiRay = computeShader.FindKernel(kNameRay);
-            if (kiRay < 0) {
-                throw new Exception("Failed to find kernel '" + kNameRay + "'");
+            kernelId = computeShader.FindKernel(kernelName);
+            if (kernelId < 0) {
+                throw new Exception("Failed to find kernel '" + kernelName + "'");
             }
 
             // 输入
-            computeShader.SetBuffer(kiCull, "_AllInstancesData", allBuf);
-            computeShader.SetBuffer(kiRay, "_AllInstancesData", allBuf);
+            computeShader.SetBuffer(kernelId, "_AllInstancesData", allBuf);
 
             // 输出
-            computeShader.SetBuffer(kiCull, "_VisibleInstancesData", visibleBuf);
+            computeShader.SetBuffer(kernelId, "_VisibleInstancesData", visibleBuf);
             mat.SetBuffer("_VisibleInstancesData", visibleBuf);
 
-            computeShader.SetBuffer(kiRay, "_RayCastData", rayBuf);
-            mat.SetBuffer("_RayCastData", rayBuf);
+            computeShader.SetBuffer(kernelId, "_RayResult", rayBuf);
+            mat.SetBuffer("_RayResult", rayBuf);
 
             Debug.Log($"Buffers created successfully: {n} instances");
         }
@@ -216,7 +225,7 @@ namespace IcoSphere {
         //  v2-----v1
         //    \c12/
         //     \ /
-        private InstanceData NewInstanceData(Pack p, int i) {
+        private InstanceData NewInstanceData(Pack p, uint i) {
             float r = sphereRadius;
 
             Tri t = p.tris[i];
@@ -231,6 +240,7 @@ namespace IcoSphere {
             Vector3 c20 = p.ctrs[i * 3 + 2] * r;
 
             return new() {
+                id = i,
                 v0 = new Vector4(p0.x, p0.y, p0.z, v0),
                 v1 = new Vector4(p1.x, p1.y, p1.z, v1),
                 v2 = new Vector4(p2.x, p2.y, p2.z, v2),

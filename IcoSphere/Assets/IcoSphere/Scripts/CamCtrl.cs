@@ -31,6 +31,7 @@ namespace IcoSphere {
             rotY += h * spdMove;
             height -= fly * spdFly;
             height += fall * spdFly;
+            height = Mathf.Min(height, -icoSphere.SphereRadius * 1.01f);
 
             transform.localRotation = Quaternion.Euler(rotX, rotY, 0);
             cam.transform.localPosition = new Vector3(0.0f, 0.0f, height);

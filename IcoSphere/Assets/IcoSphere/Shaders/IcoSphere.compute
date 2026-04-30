@@ -1,7 +1,7 @@
-#pragma kernel Cull
-#pragma kernel Ray
+#pragma kernel Main
 
 struct InstanceData {
+    uint id;
     float4 v0;
     float4 v1;
     float4 v2;
@@ -11,25 +11,29 @@ struct InstanceData {
     float4 col;
 };
 
-// input: Common
+struct RayData {
+    uint tid; // 三角形id
+    uint vid; // 顶点id
+    float3 o; // 射线起点
+    float3 d; // 射线方向
+    float u; // 重心坐标u
+    float v; // 重心坐标v
+    float t; // 射线参数t (交点到原点的距离)
+};
+
+// input
 StructuredBuffer<InstanceData> _AllInstancesData;
 uint _MaxNum;
-
-// input: Cull
 float4 _FrustumPlanes[6];
 float _MaxDistance;
 float3 _CamPos;
 float _InstanceRadius;
-
-// input: Ray
 float3 _RayOrigin;
 float3 _RayDir;
 
-// output: Cull
+// output
 AppendStructuredBuffer<InstanceData> _VisibleInstancesData;
-
-// output: Ray
-AppendStructuredBuffer<InstanceData> _RayCastData;
+RWStructuredBuffer<RayData> _RayResult;
 
 // 剔除算法
 bool IsVisible(float3 worldPos, float3 normal, float radius) {
@@ -55,84 +59,149 @@ bool IsVisible(float3 worldPos, float3 normal, float radius) {
     return true;
 }
 
-// Möller-Trumbore算法
-// 射线: 起点ro，方向rd (需归一化)
-// 三角形顶点: v0, v1, v2
-// 输出: 交点参数t (射线起点到交点的距离), 重心坐标uv.x和uv.y (uv.z = 1 - uv.x - uv.y)
-// 返回: 是否相交
-bool RayTriIntersect(float3 ro, float3 rd, float3 v0, float3 v1, float3 v2, out float t, out float2 uv) {
+// 射线与三角形相交测试 (Möller-Trumbore)
+// 输入:
+//   ro, rd     - 射线原点、方向 (需归一化或不要求，但t为沿rd的长度)
+//   v0, v1, v2 - 三角形三个顶点 (世界空间或同一坐标系下)
+// 输出:
+//   outU, outV - 重心坐标, v0 -> v1为u轴方向, v0 -> v2为v轴方向
+//   outT       - 射线参数t (交点到原点的距离)
+// 返回值: true = 相交,false = 不相交
+bool RayTriIntersect(
+    float3 ro, float3 rd,
+    float3 v0, float3 v1, float3 v2,
+    out float outU, out float outV, out float outT) {
     const float EPS = 1e-6;
 
-    float3 e1 = v1 - v0;
-    float3 e2 = v2 - v0;
-    float3 h = cross(rd, e2);
-    float a = dot(e1, h);
+    float3 v0v1 = v1 - v0;
+    float3 v0v2 = v2 - v0;
+    float3 pvec = cross(rd, v0v2);
+    float det = dot(v0v1, pvec);
 
-    // 射线与三角形平面平行
-    if (abs(a) < EPS) {
+    outU = outV = outT = 0.0;
+
+    // 背面剔除 (若不需要剔除背面, 注释下面的宏)
+#define RAY_CULL_BACK
+#ifdef RAY_CULL_BACK
+    if (det < EPS) {
+        return false;
+    }
+#else
+    if (abs(det) < EPS) {
+        return false;
+    }
+#endif
+
+    float invDet = 1.0 / det;
+
+    float3 tvec = ro - v0;
+    outU = dot(tvec, pvec) * invDet;
+    if (outU < 0.0 || outU > 1.0) {
         return false;
     }
 
-    float f = 1.0 / a;
-    float3 s = ro - v0;
-    float u = f * dot(s, h);
-    if (u < 0.0 || u > 1.0) {
+    float3 qvec = cross(tvec, v0v1);
+    outV = dot(rd, qvec) * invDet;
+    if (outV < 0.0 || outU + outV > 1.0) {
         return false;
     }
 
-    float3 q = cross(s, e1);
-    float v = f * dot(rd, q);
-    if (v < 0.0 || u + v > 1.0) {
-        return false;
-    }
+    outT = dot(v0v2, qvec) * invDet;
+    return outT >= 0.0; // 交点在射线正方向
+}
 
-    t = f * dot(e2, q);
-    // 交点在射线反方向
-    if (t < EPS) {
-        return false;
+// 判断q是否在180度夹角范围内, 返回0或者1
+// 这个夹角起点是p, 两条边的方向向量是v0, v1
+float In180Angle(float3 p, float3 v0, float3 v1, float3 q) {
+    float3 u = q - p;
+    float a = dot(v0, v0);
+    float b = dot(v0, v1);
+    float c = dot(v1, v1);
+    float u0 = dot(u, v0);
+    float u1 = dot(u, v1);
+    float delta = 1.0 / (a * c - b * b);
+    float alpha = (u0 * c - b * u1) * delta;
+    float beta = (a * u1 - b * u0) * delta;
+    return step(0.0, alpha) * step(0.0, beta);
+}
+
+// 获取射线坐标
+float3 GetRayPos(float3 v0, float3 v1, float3 v2, float u, float v) {
+    float3 dirU = v1 - v0;
+    float3 dirV = v2 - v0;
+    return v0 + dirU * u + dirV * v;
+}
+
+// 将p投影到平面上, 已知这个平面的法线n, 以及这个平面上的一个点q
+float3 ProjToNormalPlane(float3 n, float3 p, float3 q) {
+    return p - n * dot(n, p - q) / dot(n, n);
+}
+
+// 获取射线击中点所在扇区顶点id
+// v0 -> v1: u方向
+// v0 -> v2: v方向
+//       v0
+//       / \
+// c01--/-o-\--c20
+//     /  |  \
+//    v1--+--v2
+//        |
+//       c12
+uint GetRayVid(InstanceData data, float3 o, float u, float v) {
+    float3 v0 = data.v0.xyz;
+    float3 v1 = data.v1.xyz;
+    float3 v2 = data.v2.xyz;
+    float3 p = GetRayPos(v0, v1, v2, u, v);
+    float3 n = normalize(cross(v1 - v0, v2 - v0));
+    float3 c01 = ProjToNormalPlane(n, data.c01.xyz, o);
+    float3 c12 = ProjToNormalPlane(n, data.c12.xyz, o);
+    float3 c20 = ProjToNormalPlane(n, data.c20.xyz, o);
+    if (In180Angle(o, c20 - o, c01 - o, p) > 0.0) {
+        return data.v0.w;
+    } else if (In180Angle(o, c01 - o, c12 - o, p) > 0.0) {
+        return data.v1.w;
     }
-    uv = float2(u, v);
-    return true;
+    return data.v2.w;
 }
 
 [numthreads(64, 1, 1)]
-void Cull(uint3 id : SV_DispatchThreadID) {
+void Main(uint3 id : SV_DispatchThreadID) {
     uint i = id.x;
     if (i >= _MaxNum) {
         return;
     }
 
     InstanceData data = _AllInstancesData[i];
-
     float3 v0 = data.v0.xyz;
     float3 v1 = data.v1.xyz;
     float3 v2 = data.v2.xyz;
-    float3 p = (v0 + v1 + v2) / 3.0f;
+
+    // 视锥剔除
+    float3 o = (v0 + v1 + v2) / 3.0f;
     float3 n = normalize(cross(v1 - v0, v2 - v0)); // 3点确定法线
     float l01 = length(v0 - v1);
     float l12 = length(v1 - v2);
     float l20 = length(v2 - v0);
     float r = _InstanceRadius * max(max(l01, l12), l20) * 0.5f;
-    if (IsVisible(p, n, r)) {
+    if (IsVisible(o, n, r)) {
         _VisibleInstancesData.Append(data);
-    }
-}
-
-[numthreads(64, 1, 1)]
-void Ray(uint3 id : SV_DispatchThreadID) {
-    uint i = id.x;
-    if (i >= _MaxNum) {
+    } else {
         return;
     }
 
-    InstanceData data = _AllInstancesData[i];
-    float3 v0 = data.v0.xyz;
-    float3 v1 = data.v1.xyz;
-    float3 v2 = data.v2.xyz;
-    float outT;
-    float2 outUv;
-
-    if (RayTriIntersect(_RayOrigin, _RayDir, v0, v1, v2, outT, outUv)) {
-        _RayCastData.Append(data);
+    // 视锥剔除后再进行射线检测
+    float outU = 0.0;
+    float outV = 0.0;
+    float outT = 0.0;
+    if (RayTriIntersect(_RayOrigin, _RayDir, v0, v1, v2, outU, outV, outT)) {
+        RayData ray = (RayData)0;
+        ray.tid = i;
+        ray.vid = GetRayVid(data, o, outU, outV);
+        ray.o = _RayOrigin;
+        ray.d = _RayDir;
+        ray.u = outU;
+        ray.v = outV;
+        ray.t = outT;
+        _RayResult[0] = ray;
     }
 }
