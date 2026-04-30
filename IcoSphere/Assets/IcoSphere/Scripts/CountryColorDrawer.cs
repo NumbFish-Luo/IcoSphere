@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using UnityEditor;
 using UnityEngine;
 
 namespace IcoSphere {
@@ -7,6 +8,7 @@ namespace IcoSphere {
         [System.Serializable]
         public struct CountrySetting {
             public string name;
+            public uint id;
             public Color col;
 
             // 有效性检测
@@ -16,6 +18,7 @@ namespace IcoSphere {
         }
 
         [SerializeField] private IcoSphere icoSphere = null;
+        [SerializeField] private string savePath = "Assets/IcoSphere/Resources/Bin/all_buf_data.bytes";
         [SerializeField] private string nowCountryName = null;
         [SerializeField] private List<CountrySetting> countrySettings = new();
 
@@ -34,7 +37,7 @@ namespace IcoSphere {
             if (Input.GetMouseButton(0)) {
                 CountrySetting cs = GetCountrySetting(nowCountryName);
                 if (cs.IsValid()) {
-                    icoSphere.DrawHexColorToComputeShader(cs.col);
+                    icoSphere.DrawHexColorToComputeShader(cs.col, cs.id);
                 }
             }
         }
@@ -78,6 +81,18 @@ namespace IcoSphere {
         public void ClearCountrySetting() {
             countrySettings.Clear();
             countrySettingsDict.Clear();
+        }
+
+        [ContextMenu("保存国家刷色数据")]
+        public void SaveAllBufData() {
+            icoSphere.SaveAllBufData(savePath);
+            Debug.Log("成功保存数据: " + savePath);
+        }
+
+        [ContextMenu("读取国家刷色数据")]
+        public void LoadAllBufData() {
+            icoSphere.LoadAllBufData(savePath);
+            Debug.Log("成功读取数据: " + savePath);
         }
     }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using UnityEngine;
 
 namespace IcoSphere {
@@ -54,6 +55,17 @@ namespace IcoSphere {
             for (int i = 0; i < n; ++i) {
                 UnityEngine.Object.Destroy(tf.GetChild(i).gameObject);
             }
+        }
+
+        public static void Write(this BinaryWriter bw, Vector4 v) {
+            bw.Write(v.x);
+            bw.Write(v.y);
+            bw.Write(v.z);
+            bw.Write(v.w);
+        }
+
+        public static Vector4 ReadVec4(this BinaryReader br) {
+            return new Vector4(br.ReadSingle(), br.ReadSingle(), br.ReadSingle(), br.ReadSingle());
         }
     }
 }

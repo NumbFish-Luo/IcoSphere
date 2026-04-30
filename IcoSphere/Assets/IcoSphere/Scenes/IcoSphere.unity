@@ -681,17 +681,26 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   icoSphere: {fileID: 1571646976}
+  savePath: Assets/IcoSphere/Resources/Bin/all_buf_data.bytes
   nowCountryName: "\u4E2D\u56FD"
   countrySettings:
+  - name: "\u672A\u5B9A\u4E49"
+    id: 0
+    col: {r: 0.5, g: 0.5, b: 0.5, a: 1}
   - name: "\u4E2D\u56FD"
+    id: 1
     col: {r: 1, g: 0, b: 0, a: 1}
   - name: "\u7F8E\u56FD"
+    id: 2
     col: {r: 1, g: 0.8905109, b: 0, a: 1}
   - name: "\u82F1\u56FD"
+    id: 3
     col: {r: 0, g: 0.34198856, b: 1, a: 1}
   - name: "\u4FC4\u7F57\u65AF"
+    id: 4
     col: {r: 0.58799446, g: 1, b: 0, a: 1}
   - name: "\u65E5\u672C"
+    id: 4
     col: {r: 1, g: 0.49999988, b: 0.7050814, a: 1}
 --- !u!1 &1255339838
 GameObject:

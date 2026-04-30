@@ -40,7 +40,7 @@ Shader "Custom/ComputeShader/Tri" {
                 float4 c01;
                 float4 c12;
                 float4 c20;
-                float4 col;
+                float4 col; // rgb: 颜色, a: 国家id. 需要注意的是, 实际上这个存的是顶点的颜色值 (相当于六边形颜色值), 而不是三角形的颜色值!
             };
 
             struct RayData {

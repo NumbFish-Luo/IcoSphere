@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.InteropServices;
 using UnityEngine;
 
@@ -46,8 +47,10 @@ namespace IcoSphere {
             public Vector4 c01;
             public Vector4 c12;
             public Vector4 c20;
-            public Vector4 col;
+            public Vector4 col; // rgb: 颜色, a: 国家id. 需要注意的是, 实际上这个存的是顶点的颜色值 (相当于六边形颜色值), 而不是三角形的颜色值!
         }
+
+        public readonly static Vector4 DEFAULT_COL = new(0.5f, 0.5f, 0.5f, 0.0f);
 
         [StructLayout(LayoutKind.Sequential)]
         public struct RayData {
@@ -266,7 +269,7 @@ namespace IcoSphere {
                 c01 = new Vector4(c01.x, c01.y, c01.z, p.adjTris[i][0]),
                 c12 = new Vector4(c12.x, c12.y, c12.z, p.adjTris[i][1]),
                 c20 = new Vector4(c20.x, c20.y, c20.z, p.adjTris[i][2]),
-                col = Color.gray
+                col = DEFAULT_COL
             };
         }
 
@@ -297,14 +300,62 @@ namespace IcoSphere {
             mat.SetColor("_RayHexCol", col);
         }
 
-        public void DrawHexColorToComputeShader(Color col) {
+        public void DrawHexColorToComputeShader(Color col, uint id) {
             RayData[] outRayData = new RayData[1];
             rayBuf.GetData(outRayData);
 
             DrawHexData[] inDrawHexData = new DrawHexData[1];
             inDrawHexData[0].id = outRayData[0].vid;
-            inDrawHexData[0].col = col;
+            inDrawHexData[0].col = new Vector4(col.r, col.g, col.b, id);
             drawHexBuf.SetData(inDrawHexData);
+        }
+
+        public void SaveAllBufData(string path) {
+            InstanceData[] data = new InstanceData[triNum];
+            allBuf.GetData(data);
+
+            string directory = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory)) {
+                Directory.CreateDirectory(directory);
+            }
+
+            using BinaryWriter writer = new(File.Open(path, FileMode.Create));
+            foreach (var d in data) {
+                writer.Write(d.id);
+                writer.Write(d.v0);
+                writer.Write(d.v1);
+                writer.Write(d.v2);
+                writer.Write(d.c01);
+                writer.Write(d.c12);
+                writer.Write(d.c20);
+                writer.Write(d.col);
+            }
+        }
+
+        public bool LoadAllBufData(string path) {
+            if (!File.Exists(path)) {
+                Debug.LogError("LoadAllBufData: 文件不存在 -> " + path);
+                return false;
+            }
+
+            var result = new List<InstanceData>();
+            using (BinaryReader reader = new(File.OpenRead(path))) {
+                while (reader.BaseStream.Position < reader.BaseStream.Length) {
+                    InstanceData data = new() {
+                        id = reader.ReadUInt32(),
+                        v0 = reader.ReadVec4(),
+                        v1 = reader.ReadVec4(),
+                        v2 = reader.ReadVec4(),
+                        c01 = reader.ReadVec4(),
+                        c12 = reader.ReadVec4(),
+                        c20 = reader.ReadVec4(),
+                        col = reader.ReadVec4()
+                    };
+                    result.Add(data);
+                }
+            }
+            allBuf.SetData(result.ToArray());
+            return true;
         }
     }
 }
