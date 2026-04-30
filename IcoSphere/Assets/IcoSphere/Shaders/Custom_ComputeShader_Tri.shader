@@ -269,24 +269,10 @@ Shader "Custom/ComputeShader/Tri" {
                 float4 rayCol = i.ray * i.ray.w;
                 rayCol.b = 0.0;
 
-                // (测试) 对当前三角形扇区判断并着色, 这个步骤或许要移动到compute shader中
-                if (i.ray.w > 0.0) {
-                    if (In180Angle(o, i.c20.xyz - o, i.c01.xyz - o, rayPos) > 0.0) {
-                        // v0扇区
-                        if (vid == i.v0.w) {
-                            rayCol += 0.5;
-                        }
-                    } else if (In180Angle(o, i.c01.xyz - o, i.c12.xyz - o, rayPos) > 0.0) {
-                        // v1扇区
-                        if (vid == i.v1.w) {
-                            rayCol += 0.5;
-                        }
-                    } else {
-                        // v2扇区
-                        if (vid == i.v2.w) {
-                            rayCol += 0.5;
-                        }
-                    }
+                // (测试) 为六边形区域着色, 需要判断当前绘制的像素所在扇区顶点是否是射线顶点
+                if (vid == (uint)i.ray.z) {
+                    rayCol.a = 1.0;
+                    rayCol.rgb += 0.5;
                 }
 
                 // (测试) 混合显示射线区域
