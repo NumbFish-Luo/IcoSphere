@@ -20,6 +20,7 @@ namespace IcoSphere {
         private ComputeBuffer allBuf;
         private ComputeBuffer visibleBuf;
         private ComputeBuffer rayBuf;
+        private ComputeBuffer drawHexBuf;
         private ComputeBuffer argsBuf;
         private const string kernelName = "Main";
         private int kernelId;
@@ -37,7 +38,7 @@ namespace IcoSphere {
         //     \ /
         // 然后为了最大化利用数据, xyz对应具体坐标, w对应序号(Int32)
         [StructLayout(LayoutKind.Sequential)]
-        private struct InstanceData {
+        public struct InstanceData {
             public uint id; // 三角形id
             public Vector4 v0;
             public Vector4 v1;
@@ -49,7 +50,7 @@ namespace IcoSphere {
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        struct RayData {
+        public struct RayData {
             public uint tid; // 三角形id
             public uint vid; // 顶点id
             public Vector3 o; // 射线起点
@@ -58,6 +59,12 @@ namespace IcoSphere {
             public float v; // 重心坐标v
             public float t; // 射线参数t (交点到原点的距离)
         };
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct DrawHexData {
+            public uint id; // 顶点id
+            public Color col;
+        }
 
         private void Awake() {
             supportsComputeShaders = CheckSupportsComputeShaders();
@@ -179,6 +186,13 @@ namespace IcoSphere {
             return result;
         }
 
+        private DrawHexData[] NewDefaultDrawHexData() {
+            DrawHexData[] result = new DrawHexData[1];
+            result[0].id = (uint)triNum;
+            result[0].col = Color.clear;
+            return result;
+        }
+
         private void NewBufs(Pack p) {
             int n = p.tris.Length;
             triNum = n;
@@ -192,6 +206,8 @@ namespace IcoSphere {
             visibleBuf = ComputeBufManager.NewBuf(n, stride, ComputeBufferType.Append);
             rayBuf = ComputeBufManager.NewBuf(n, Marshal.SizeOf(typeof(RayData)));
             rayBuf.SetData(NewDefaultRayData());
+            drawHexBuf = ComputeBufManager.NewBuf(n, Marshal.SizeOf(typeof(DrawHexData)));
+            drawHexBuf.SetData(NewDefaultDrawHexData());
             argsBuf = ComputeBufManager.NewBuf(1, args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
             args[0] = mesh.GetIndexCount(0); // Index Count Per Instance
             args[1] = 0; // Instance Count
@@ -207,6 +223,9 @@ namespace IcoSphere {
 
             // 输入
             computeShader.SetBuffer(kernelId, "_AllInstancesData", allBuf);
+            mat.SetBuffer("_AllInstancesData", allBuf);
+
+            computeShader.SetBuffer(kernelId, "_DrawHexData", drawHexBuf);
 
             // 输出
             computeShader.SetBuffer(kernelId, "_VisibleInstancesData", visibleBuf);
@@ -247,30 +266,23 @@ namespace IcoSphere {
                 c01 = new Vector4(c01.x, c01.y, c01.z, p.adjTris[i][0]),
                 c12 = new Vector4(c12.x, c12.y, c12.z, p.adjTris[i][1]),
                 c20 = new Vector4(c20.x, c20.y, c20.z, p.adjTris[i][2]),
-                col = Misc.RandomRgb(i)
+                col = Color.gray
             };
         }
 
+        private void FreeBuf(ref ComputeBuffer buf) {
+            if (buf != null) {
+                ComputeBufManager.ScheduleRelease(buf);
+                buf = null;
+            }
+        }
+
         private void FreeBufs() {
-            if (allBuf != null) {
-                ComputeBufManager.ScheduleRelease(allBuf);
-                allBuf = null;
-            }
-
-            if (visibleBuf != null) {
-                ComputeBufManager.ScheduleRelease(visibleBuf);
-                visibleBuf = null;
-            }
-
-            if (rayBuf != null) {
-                ComputeBufManager.ScheduleRelease(rayBuf);
-                rayBuf = null;
-            }
-
-            if (argsBuf != null) {
-                ComputeBufManager.ScheduleRelease(argsBuf);
-                argsBuf = null;
-            }
+            FreeBuf(ref allBuf);
+            FreeBuf(ref visibleBuf);
+            FreeBuf(ref rayBuf);
+            FreeBuf(ref drawHexBuf);
+            FreeBuf(ref argsBuf);
         }
 
         private Vector4[] PlanesToVector4(Plane[] p) {
@@ -279,6 +291,20 @@ namespace IcoSphere {
                 result[i] = new Vector4(p[i].normal.x, p[i].normal.y, p[i].normal.z, p[i].distance);
             }
             return result;
+        }
+
+        public void SetRayHexColorToShader(Color col) {
+            mat.SetColor("_RayHexCol", col);
+        }
+
+        public void DrawHexColorToComputeShader(Color col) {
+            RayData[] outRayData = new RayData[1];
+            rayBuf.GetData(outRayData);
+
+            DrawHexData[] inDrawHexData = new DrawHexData[1];
+            inDrawHexData[0].id = outRayData[0].vid;
+            inDrawHexData[0].col = col;
+            drawHexBuf.SetData(inDrawHexData);
         }
     }
 }

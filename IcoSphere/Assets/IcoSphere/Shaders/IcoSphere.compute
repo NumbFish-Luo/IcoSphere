@@ -1,7 +1,7 @@
 #pragma kernel Main
 
 struct InstanceData {
-    uint id;
+    uint id; // 三角形id
     float4 v0;
     float4 v1;
     float4 v2;
@@ -21,8 +21,14 @@ struct RayData {
     float t; // 射线参数t (交点到原点的距离)
 };
 
+struct DrawHexData {
+    uint id; // 顶点id
+    float4 col;
+};
+
 // input
-StructuredBuffer<InstanceData> _AllInstancesData;
+RWStructuredBuffer<InstanceData> _AllInstancesData;
+RWStructuredBuffer<DrawHexData> _DrawHexData; // 长度只有1, 设置射线颜色, col.a为是否绘制射线颜色
 uint _MaxNum;
 float4 _FrustumPlanes[6];
 float _MaxDistance;
@@ -33,7 +39,7 @@ float3 _RayDir;
 
 // output
 AppendStructuredBuffer<InstanceData> _VisibleInstancesData;
-RWStructuredBuffer<RayData> _RayResult;
+RWStructuredBuffer<RayData> _RayResult; // 长度只有1, 返回射线结果
 
 // 剔除算法
 bool IsVisible(float3 worldPos, float3 normal, float radius) {
@@ -176,6 +182,15 @@ void Main(uint3 id : SV_DispatchThreadID) {
     float3 v1 = data.v1.xyz;
     float3 v2 = data.v2.xyz;
 
+    // 六边形颜色绘制
+    DrawHexData drawHex = _DrawHexData[0];
+    if (drawHex.id == i && drawHex.col.a > 0.0) {
+        data.col = drawHex.col;
+        _AllInstancesData[i] = data;
+        drawHex.col.a = 0.0;
+        _DrawHexData[0] = drawHex;
+    }
+
     // 视锥剔除
     float3 o = (v0 + v1 + v2) / 3.0f;
     float3 n = normalize(cross(v1 - v0, v2 - v0)); // 3点确定法线
@@ -183,9 +198,7 @@ void Main(uint3 id : SV_DispatchThreadID) {
     float l12 = length(v1 - v2);
     float l20 = length(v2 - v0);
     float r = _InstanceRadius * max(max(l01, l12), l20) * 0.5f;
-    if (IsVisible(o, n, r)) {
-        _VisibleInstancesData.Append(data);
-    } else {
+    if (IsVisible(o, n, r) == false) {
         return;
     }
 
@@ -204,4 +217,6 @@ void Main(uint3 id : SV_DispatchThreadID) {
         ray.t = outT;
         _RayResult[0] = ray;
     }
+
+    _VisibleInstancesData.Append(data);
 }

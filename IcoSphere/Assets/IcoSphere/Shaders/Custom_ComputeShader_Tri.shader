@@ -2,11 +2,9 @@ Shader "Custom/ComputeShader/Tri" {
     Properties {
         _BaseMap ("Base Map", 2D) = "white" {}
         _BaseColor ("Base Color", Color) = (1.0, 1.0, 1.0, 1.0)
-        _TerrainTestD ("Terrain Test D", 2D) = "white" {}
-        _TerrainTestH ("Terrain Test H", 2D) = "white" {}
-        _TerrainTestM ("Terrain Test M", 2D) = "white" {}
         _Radius ("Radius", Float) = 1.0
         _LineWidth ("Line Width", Float) = 0.0003
+        _RayHexCol ("Ray Hex Col", Color) = (1.0, 1.0, 1.0, 1.0)
     }
     SubShader {
         Tags {
@@ -55,6 +53,7 @@ Shader "Custom/ComputeShader/Tri" {
                 float t; // 射线参数t (交点到原点的距离)
             };
 
+            StructuredBuffer<InstanceData> _AllInstancesData;
             StructuredBuffer<InstanceData> _VisibleInstancesData;
             StructuredBuffer<RayData> _RayResult;
 
@@ -84,18 +83,13 @@ Shader "Custom/ComputeShader/Tri" {
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
-            TEXTURE2D(_TerrainTestD);
-            SAMPLER(sampler_TerrainTestD);
-            TEXTURE2D(_TerrainTestH);
-            SAMPLER(sampler_TerrainTestH);
-            TEXTURE2D(_TerrainTestM);
-            SAMPLER(sampler_TerrainTestM);
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseMap_ST;
                 half4 _BaseColor;
                 float _Radius;
                 float _LineWidth;
+                half4 _RayHexCol;
             CBUFFER_END
 
             // 将p投影到平面上, 已知这个平面的法线n, 以及这个平面上的一个点q
@@ -154,23 +148,11 @@ Shader "Custom/ComputeShader/Tri" {
                 return o;
             }
 
-            float SdSegment(float2 p, float2 a, float2 b) {
-                float2 pa = p - a;
-                float2 ba = b - a;
-                float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-                return length(pa - ba * h);
-            }
-
             float SdSegment3d(float3 p, float3 a, float3 b) {
                 float3 pa = p - a;
                 float3 ba = b - a;
                 float h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
                 return length(pa - ba * h);
-            }
-
-            float SmoothLine(float2 p, float2 a, float2 b, float width) {
-                float d = SdSegment(p, a, b);
-                return 1.0 - smoothstep(0.0, width, d);
             }
 
             float SmoothLine3d(float3 p, float3 a, float3 b, float width) {
@@ -221,8 +203,9 @@ Shader "Custom/ComputeShader/Tri" {
                 return float2(atan2(p.y, p.x), asin(p.z));
             }
 
-            float Equal(float a, float b) {
-                return 1.0 - step(0.00001, abs(a - b));
+            float FloatEqual(float a, float b) {
+                const float EPS = 1e-6;
+                return 1.0 - step(EPS, abs(a - b));
             }
 
             half4 frag(Varyings i) : SV_Target {
@@ -255,8 +238,8 @@ Shader "Custom/ComputeShader/Tri" {
                 } else if (In180Angle(o, i.c12.xyz - o, i.c20.xyz - o, p) > 0.0) {
                     vid = i.v2.w;
                 }
-                col.rgb = RandomRgb(vid);
-                col = lerp(col * 0.5, colLine, l);
+                col.rgb = _AllInstancesData[vid].col.rgb;
+                col = lerp(col, colLine, l);
 
                 float t = (sin(_Time.y) + 1.0) * 0.5;
 
@@ -265,19 +248,14 @@ Shader "Custom/ComputeShader/Tri" {
                 float3 dirV = i.v2.xyz - i.v0.xyz;
                 float3 rayPos = i.v0.xyz + dirU * i.ray.x + dirV * i.ray.y;
 
-                // (测试) 为当前射线击中的三角形着色
-                float4 rayCol = i.ray * i.ray.w;
-                rayCol.b = 0.0;
-
-                // (测试) 为六边形区域着色, 需要判断当前绘制的像素所在扇区顶点是否是射线顶点
+                // 为六边形区域着色, 需要判断当前绘制的像素所在扇区顶点是否是射线顶点
+                float rayHex = 0.0;
                 if (vid == (uint)i.ray.z) {
-                    rayCol.a = 1.0;
-                    rayCol.rgb += 0.5;
+                    rayHex = 1.0;
                 }
 
-                // (测试) 混合显示射线区域
-                t = 0.9;
-                col = lerp(col, rayCol, t);
+                // 混合显示射线区域
+                col = lerp(col, _RayHexCol, rayHex);
                 return col;
             }
             ENDHLSL
