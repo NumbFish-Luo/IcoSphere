@@ -700,7 +700,7 @@ MonoBehaviour:
     id: 4
     col: {r: 0.58799446, g: 1, b: 0, a: 1}
   - name: "\u65E5\u672C"
-    id: 4
+    id: 5
     col: {r: 1, g: 0.49999988, b: 0.7050814, a: 1}
 --- !u!1 &1255339838
 GameObject:

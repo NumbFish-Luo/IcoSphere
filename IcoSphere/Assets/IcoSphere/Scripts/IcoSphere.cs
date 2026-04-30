@@ -129,6 +129,7 @@ namespace IcoSphere {
 
         private void OnDestroy() {
             FreeBufs();
+            ResetMat();
         }
 
         private void Init() {
@@ -286,6 +287,10 @@ namespace IcoSphere {
             FreeBuf(ref rayBuf);
             FreeBuf(ref drawHexBuf);
             FreeBuf(ref argsBuf);
+        }
+
+        private void ResetMat() {
+            mat.SetColor("_RayHexCol", Color.white);
         }
 
         private Vector4[] PlanesToVector4(Plane[] p) {
