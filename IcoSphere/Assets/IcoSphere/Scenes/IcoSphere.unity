@@ -681,7 +681,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   icoSphere: {fileID: 1571646976}
-  savePath: Assets/IcoSphere/Resources/Bin/all_buf_data.bytes
+  saveBytesPath: Assets/IcoSphere/Resources/Bin/all_buf_data.bytes
+  saveCfgPath: Assets/IcoSphere/Resources/Cfg/country_settings.tsv
   mappingTex: {fileID: 2800000, guid: 6096fee97f5ee6e478e562272bed6f29, type: 3}
   nowCountryName: "\u4E2D\u56FD"
   countrySettings:
