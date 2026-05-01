@@ -18,7 +18,9 @@ namespace IcoSphere {
         }
 
         [SerializeField] private IcoSphere icoSphere = null;
-        [SerializeField] private string savePath = "Assets/IcoSphere/Resources/Bin/all_buf_data.bytes";
+        [SerializeField] private string saveBytesPath = "Assets/IcoSphere/Resources/Bin/all_buf_data.bytes";
+        [SerializeField] private string saveCfgPath = "Assets/IcoSphere/Resources/Cfg/country_settings.csv";
+        [SerializeField] private Texture2D mappingTex = null;
         [SerializeField] private string nowCountryName = null;
         [SerializeField] private List<CountrySetting> countrySettings = new();
 
@@ -85,14 +87,14 @@ namespace IcoSphere {
 
         [ContextMenu("保存国家刷色数据")]
         public void SaveAllBufData() {
-            icoSphere.SaveAllBufData(savePath);
-            Debug.Log("成功保存数据: " + savePath);
+            icoSphere.SaveAllBufData(saveBytesPath);
+            Debug.Log("成功保存数据: " + saveBytesPath);
         }
 
         [ContextMenu("读取国家刷色数据")]
         public void LoadAllBufData() {
-            icoSphere.LoadAllBufData(savePath);
-            Debug.Log("成功读取数据: " + savePath);
+            icoSphere.LoadAllBufData(saveBytesPath);
+            Debug.Log("成功读取数据: " + saveBytesPath);
         }
     }
 }

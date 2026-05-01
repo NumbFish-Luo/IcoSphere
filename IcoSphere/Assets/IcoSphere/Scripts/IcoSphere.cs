@@ -23,8 +23,10 @@ namespace IcoSphere {
         private ComputeBuffer rayBuf;
         private ComputeBuffer drawHexBuf;
         private ComputeBuffer argsBuf;
-        private const string kernelName = "Main";
-        private int kernelId;
+        private const string kernelMainName = "Main";
+        private const string kernelMappingName = "Mapping";
+        private int kernelMainId;
+        private int kernelMappingId;
         private float instanceRadius;
         private readonly uint[] args = new uint[5] { 0, 0, 0, 0, 0 };
 
@@ -98,7 +100,7 @@ namespace IcoSphere {
                 // 执行剔除
                 visibleBuf.SetCounterValue(0);
                 int threadGroups = Mathf.CeilToInt(triNum / 64.0f);
-                computeShader.Dispatch(kernelId, threadGroups, 1, 1);
+                computeShader.Dispatch(kernelMainId, threadGroups, 1, 1);
                 ComputeBuffer.CopyCount(visibleBuf, argsBuf, sizeof(uint));
 
                 // 使用足够大的包围盒，确保所有相机都能看到
@@ -220,22 +222,27 @@ namespace IcoSphere {
             args[4] = 0; // Start Instance Location
             argsBuf.SetData(args);
 
-            kernelId = computeShader.FindKernel(kernelName);
-            if (kernelId < 0) {
-                throw new Exception("Failed to find kernel '" + kernelName + "'");
+            kernelMainId = computeShader.FindKernel(kernelMainName);
+            if (kernelMainId < 0) {
+                throw new Exception("Failed to find kernel '" + kernelMainName + "'");
             }
 
-            // 输入
-            computeShader.SetBuffer(kernelId, "_AllInstancesData", allBuf);
+            kernelMappingId = computeShader.FindKernel(kernelMappingName);
+            if (kernelMainId < 0) {
+                throw new Exception("Failed to find kernel '" + kernelMappingName + "'");
+            }
+
+            // 输入: Main
+            computeShader.SetBuffer(kernelMainId, "_AllInstancesData", allBuf);
             mat.SetBuffer("_AllInstancesData", allBuf);
 
-            computeShader.SetBuffer(kernelId, "_DrawHexData", drawHexBuf);
+            computeShader.SetBuffer(kernelMainId, "_DrawHexData", drawHexBuf);
 
-            // 输出
-            computeShader.SetBuffer(kernelId, "_VisibleInstancesData", visibleBuf);
+            // 输出: Main
+            computeShader.SetBuffer(kernelMainId, "_VisibleInstancesData", visibleBuf);
             mat.SetBuffer("_VisibleInstancesData", visibleBuf);
 
-            computeShader.SetBuffer(kernelId, "_RayResult", rayBuf);
+            computeShader.SetBuffer(kernelMainId, "_RayResult", rayBuf);
             mat.SetBuffer("_RayResult", rayBuf);
 
             Debug.Log($"Buffers created successfully: {n} instances");

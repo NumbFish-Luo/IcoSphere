@@ -1,4 +1,5 @@
 #pragma kernel Main
+#pragma kernel Mapping
 
 struct InstanceData {
     uint id; // 三角形id
@@ -26,7 +27,7 @@ struct DrawHexData {
     float4 col;
 };
 
-// input
+// input: Main
 RWStructuredBuffer<InstanceData> _AllInstancesData;
 RWStructuredBuffer<DrawHexData> _DrawHexData; // 长度只有1, 设置射线颜色, col.a为是否绘制射线颜色
 uint _MaxNum;
@@ -37,7 +38,7 @@ float _InstanceRadius;
 float3 _RayOrigin;
 float3 _RayDir;
 
-// output
+// output: Main
 AppendStructuredBuffer<InstanceData> _VisibleInstancesData;
 RWStructuredBuffer<RayData> _RayResult; // 长度只有1, 返回射线结果
 
@@ -220,4 +221,9 @@ void Main(uint3 id : SV_DispatchThreadID) {
     }
 
     _VisibleInstancesData.Append(data);
+}
+
+[numthreads(64, 1, 1)]
+void Mapping(uint3 id : SV_DispatchThreadID) {
+    
 }
