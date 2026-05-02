@@ -98,8 +98,8 @@ namespace IcoSphere {
         // precisionLv = 3, 对应0~64
         // 之后会将数值再次返回0~255再得出结果
         public static HashSet<uint> CountUniqueColors(Texture2D tex, int precisionLv = 0) {
-            if (tex.format != TextureFormat.RGBA32 && tex.format != TextureFormat.ARGB32) {
-                Debug.LogWarning("纹理非RGBA32/ARGB32格式, 建议先转换后再调用");
+            if (tex.format != TextureFormat.RGBA32) {
+                Debug.LogWarning("纹理非RGBA32格式, 建议先转换后再调用");
                 Debug.LogWarning("请先阅读README文件修改图片设置");
             }
 
@@ -111,18 +111,10 @@ namespace IcoSphere {
 
             for (int i = 0; i < n; ++i) {
                 int offset = i * 4;
-                byte r, g, b;
-                // 根据纹理格式提取RGB, 忽略A通道
-                if (tex.format == TextureFormat.RGBA32) {
-                    r = rawData[offset];
-                    g = rawData[offset + 1];
-                    b = rawData[offset + 2];
-                } else {
-                    // ARGB32
-                    r = rawData[offset + 1];
-                    g = rawData[offset + 2];
-                    b = rawData[offset + 3];
-                }
+                // 忽略A通道
+                byte r = rawData[offset];
+                byte g = rawData[offset + 1];
+                byte b = rawData[offset + 2];
                 if (precisionLv > 0) {
                     // 先右移抹除部分精度
                     r >>= p;
@@ -219,6 +211,18 @@ namespace IcoSphere {
                 ++i;
             }
             InitDict();
+        }
+
+        [ContextMenu("生成地图映射配置, 并执行地图贴图映射 (不保存文件)")]
+        public void DoMapping() {
+            GenMappingTexSettings();
+
+            Dictionary<uint, uint> hexRgbIdDict = new();
+            foreach (CountrySetting cs in countrySettings) {
+                hexRgbIdDict.Add(Misc.ColorToHexRgb(cs.col), cs.id);
+            }
+            icoSphere.MappingTex(mappingTex, hexRgbIdDict);
+            Debug.Log("完成地图贴图映射");
         }
     }
 }

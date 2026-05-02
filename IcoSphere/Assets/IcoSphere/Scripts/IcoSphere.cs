@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
+using Unity.Collections;
 using UnityEngine;
 
 namespace IcoSphere {
@@ -320,6 +321,53 @@ namespace IcoSphere {
             inDrawHexData[0].id = outRayData[0].vid;
             inDrawHexData[0].col = new Vector4(col.r, col.g, col.b, id);
             drawHexBuf.SetData(inDrawHexData);
+        }
+
+        // hexRgbIdDict: <hexRgb, id>
+        public void MappingTex(Texture2D tex, Dictionary<uint, uint> hexRgbIdDict) {
+            Debug.Log(Misc.ToLonLat(new Vector3(1, 0, 0)));
+
+            if (tex.format != TextureFormat.RGBA32) {
+                Debug.LogWarning("纹理非RGBA32格式, 建议先转换后再调用");
+                Debug.LogWarning("请先阅读README文件修改图片设置");
+            }
+
+            NativeArray<byte> pixelData = tex.GetPixelData<byte>(0); // mip level 0
+            int w = tex.width;
+            int h = tex.height;
+            int stride = w * 4;
+
+            Pack pack = Pack.Read(recursion);
+            int n = pack.tris.Length;
+            triNum = n;
+            InstanceData[] data = new InstanceData[n];
+            for (uint i = 0; i < n; ++i) {
+                data[i] = NewInstanceData(pack, i);
+            }
+            // 映射国家颜色值
+            for (uint i = 0; i < n; ++i) {
+                MappingInstanceDataCol(data, hexRgbIdDict, pixelData, data[i].v0, w, h);
+                MappingInstanceDataCol(data, hexRgbIdDict, pixelData, data[i].v1, w, h);
+                MappingInstanceDataCol(data, hexRgbIdDict, pixelData, data[i].v2, w, h);
+            }
+            allBuf = ComputeBufManager.NewBuf(n, Marshal.SizeOf(typeof(InstanceData)));
+            allBuf.SetData(data);
+            computeShader.SetBuffer(kernelMainId, "_AllInstancesData", allBuf);
+            mat.SetBuffer("_AllInstancesData", allBuf);
+        }
+
+        private void MappingInstanceDataCol(InstanceData[] data, Dictionary<uint, uint> hexRgbIdDict, NativeArray<byte> pixelData, Vector4 v, int w, int h) {
+            Vector2 uv = Misc.ToLonLatUv(v);
+            int x = (int)(uv.x * w);
+            int y = (int)(uv.y * h);
+            x = Mathf.Clamp(x, 0, w - 1);
+            y = Mathf.Clamp(y, 0, h - 1);
+            int offset = y * w * 4 + x * 4;
+            uint r = pixelData[offset];
+            uint g = pixelData[offset + 1];
+            uint b = pixelData[offset + 2];
+            uint hexRgb = (r << 16) | (g << 8) | b;
+            data[(uint)v.w].col = new Vector4(r / 255.0f, g / 255.0f, b / 255.0f, hexRgbIdDict[hexRgb]);
         }
 
         public void SaveAllBufData(string path) {

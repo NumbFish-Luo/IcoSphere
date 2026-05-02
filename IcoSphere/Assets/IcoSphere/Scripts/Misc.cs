@@ -82,6 +82,21 @@ namespace IcoSphere {
             return new(r / 255f, g / 255f, b / 255f, 1f);
         }
 
+        // 世界坐标转经纬度
+        // 经度 (Longitude): (-1.0, 1.0] * pi
+        // 纬度  (Latitude): (-0.5, 0.5] * pi
+        public static Vector2 ToLonLat(Vector3 p) {
+            p = p.normalized;
+            return new(Mathf.Atan2(p.z, p.x), Mathf.Asin(p.y));
+        }
+
+        public static Vector2 ToLonLatUv(Vector3 p) {
+            Vector2 lonLat = ToLonLat(p) / Mathf.PI;
+            float x = lonLat.x;
+            float y = lonLat.y;
+            return new((x + 1.0f) * 0.5f, y + 0.5f);
+        }
+
         public static void KillAllChildren(this Transform tf) {
             int n = tf.childCount;
             for (int i = 0; i < n; ++i) {

@@ -27,16 +27,21 @@ struct DrawHexData {
     float4 col;
 };
 
-// input: Main
+// input: Common
 RWStructuredBuffer<InstanceData> _AllInstancesData;
-RWStructuredBuffer<DrawHexData> _DrawHexData; // 长度只有1, 设置射线颜色, col.a为是否绘制射线颜色
 uint _MaxNum;
+
+// input: Main
+RWStructuredBuffer<DrawHexData> _DrawHexData; // 长度只有1, 设置射线颜色, col.a为是否绘制射线颜色
 float4 _FrustumPlanes[6];
 float _MaxDistance;
 float3 _CamPos;
 float _InstanceRadius;
 float3 _RayOrigin;
 float3 _RayDir;
+
+// input: Mapping
+Texture2D<float4> _MappingTex; // 地图映射
 
 // output: Main
 AppendStructuredBuffer<InstanceData> _VisibleInstancesData;
