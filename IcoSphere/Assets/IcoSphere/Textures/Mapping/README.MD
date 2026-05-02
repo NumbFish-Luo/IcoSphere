@@ -1,0 +1,1 @@
+图片设置里不要生成Mipmaps，然后保证Filter Mode为Point (no filter)模式，Format选择RGBA 32 bit

@@ -92,6 +92,53 @@ namespace IcoSphere {
             countrySettingsDict.Clear();
         }
 
+        // 参数precisionLv为精度等级, 消除颜色过于接近的问题
+        // precisionLv = 1, 对应0~255(不是256)
+        // precisionLv = 2, 对应0~128
+        // precisionLv = 3, 对应0~64
+        // 之后会将数值再次返回0~255再得出结果
+        public static HashSet<uint> CountUniqueColors(Texture2D tex, int precisionLv = 0) {
+            if (tex.format != TextureFormat.RGBA32 && tex.format != TextureFormat.ARGB32) {
+                Debug.LogWarning("纹理非RGBA32/ARGB32格式, 建议先转换后再调用");
+                Debug.LogWarning("请先阅读README文件修改图片设置");
+            }
+
+            // 获取原始字节数组, 每像素4字节
+            byte[] rawData = tex.GetRawTextureData();
+            int n = rawData.Length / 4;
+            HashSet<uint> result = new();
+            int p = precisionLv;
+
+            for (int i = 0; i < n; ++i) {
+                int offset = i * 4;
+                byte r, g, b;
+                // 根据纹理格式提取RGB, 忽略A通道
+                if (tex.format == TextureFormat.RGBA32) {
+                    r = rawData[offset];
+                    g = rawData[offset + 1];
+                    b = rawData[offset + 2];
+                } else {
+                    // ARGB32
+                    r = rawData[offset + 1];
+                    g = rawData[offset + 2];
+                    b = rawData[offset + 3];
+                }
+                if (precisionLv > 0) {
+                    // 先右移抹除部分精度
+                    r >>= p;
+                    g >>= p;
+                    b >>= p;
+                    // 然后左移恢复原本大小
+                    r <<= p;
+                    g <<= p;
+                    b <<= p;
+                }
+                uint packed = ((uint)r << 16) | ((uint)g << 8) | b;
+                result.Add(packed);
+            }
+            return result;
+        }
+
         [ContextMenu("保存国家刷色数据 (.bytes)")]
         public void SaveAllBufData() {
             icoSphere.SaveAllBufData(saveBytesPath);
@@ -110,12 +157,9 @@ namespace IcoSphere {
             using StreamWriter writer = new(saveCfgPath, false, Encoding.UTF8);
             writer.WriteLine("name\tid\tcol");
             foreach (CountrySetting cs in countrySettings) {
-                int r = (int)(cs.col.r * 255);
-                int g = (int)(cs.col.g * 255);
-                int b = (int)(cs.col.b * 255);
                 // a永远为255
-                string colStr = $"{r},{g},{b}";
-                writer.WriteLine($"{cs.name}\t{cs.id}\t{colStr}");
+                uint rgb = Misc.ColorToHexRgb(cs.col);
+                writer.WriteLine($"{cs.name}\t{cs.id}\t#{rgb:X6}");
             }
             Debug.Log("成功保存配置表: " + saveCfgPath);
             Debug.Log("可以按Ctrl+R刷新Assets目录");
@@ -147,24 +191,34 @@ namespace IcoSphere {
                     continue;
                 }
 
-                string[] rgb = parts[2].Split(',');
-                if (rgb.Length < 3) {
+                // Substring消除#
+                if (!uint.TryParse(parts[2].Substring(1), System.Globalization.NumberStyles.HexNumber, null, out uint rgb)) {
                     continue;
                 }
-
-                if (!int.TryParse(rgb[0], out int r) ||
-                    !int.TryParse(rgb[1], out int g) ||
-                    !int.TryParse(rgb[2], out int b)) {
-                    continue;
-                }
-
-                Color col = new(r / 255f, g / 255f, b / 255f, 1f);
+                Color col = Misc.HexRgbToColor(rgb);
                 countrySettings.Add(new CountrySetting {
                     name = name, id = id, col = col
                 });
             }
             InitDict();
             Debug.Log("成功读取配置表: " + saveCfgPath);
+        }
+
+        [ContextMenu("生成地图映射配置 (不保存文件)")]
+        public void GenMappingTexSettings() {
+            HashSet<uint> hexRgbs = CountUniqueColors(mappingTex);
+            Debug.Log("读取到的颜色种类量: " + hexRgbs.Count);
+            countrySettings.Clear();
+            uint i = 0;
+            foreach (uint hex in hexRgbs) {
+                countrySettings.Add(new CountrySetting() {
+                    name = "未定义" + i,
+                    id = i,
+                    col = Misc.HexRgbToColor(hex)
+                });
+                ++i;
+            }
+            InitDict();
         }
     }
 }

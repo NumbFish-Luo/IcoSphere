@@ -50,6 +50,38 @@ namespace IcoSphere {
             return dict;
         }
 
+        // 参数precisionLv为精度等级, 消除颜色过于接近的问题
+        // precisionLv = 0, 对应0~255(不是256)
+        // precisionLv = 1, 对应0~128
+        // precisionLv = 2, 对应0~64
+        // 之后会将数值再次返回0~255再得出结果
+        public static uint ColorToHexRgb(Color col, int precisionLv = 0) {
+            uint max = 0xFF;
+            uint r = (uint)(col.r * max);
+            uint g = (uint)(col.g * max);
+            uint b = (uint)(col.b * max);
+            // a忽略
+            int p = precisionLv;
+            if (precisionLv > 0) {
+                // 先右移抹除部分精度
+                r >>= p;
+                g >>= p;
+                b >>= p;
+                // 然后左移恢复原本大小
+                r <<= p;
+                g <<= p;
+                b <<= p;
+            }
+            return (r << 16) | (g << 8) | b;
+        }
+
+        public static Color HexRgbToColor(uint hexRgb) {
+            uint r = (hexRgb >> 16) & 0xFF;
+            uint g = (hexRgb >> 8) & 0xFF;
+            uint b = hexRgb & 0xFF;
+            return new(r / 255f, g / 255f, b / 255f, 1f);
+        }
+
         public static void KillAllChildren(this Transform tf) {
             int n = tf.childCount;
             for (int i = 0; i < n; ++i) {
