@@ -191,8 +191,8 @@ namespace IcoSphere {
                     continue;
                 }
 
-                // Substring消除#
-                if (!uint.TryParse(parts[2].Substring(1), System.Globalization.NumberStyles.HexNumber, null, out uint rgb)) {
+                // [1..]是Substring, 用于消除#
+                if (!uint.TryParse(parts[2][1..], System.Globalization.NumberStyles.HexNumber, null, out uint rgb)) {
                     continue;
                 }
                 Color col = Misc.HexRgbToColor(rgb);
