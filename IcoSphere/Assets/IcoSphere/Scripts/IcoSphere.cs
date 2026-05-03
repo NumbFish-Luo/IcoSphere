@@ -80,6 +80,24 @@ namespace IcoSphere {
             Init();
         }
 
+        private void OnEnable() {
+#if UNITY_EDITOR
+            // Ctrl+R刷新或编译脚本后触发的重置
+            UnityEditor.AssemblyReloadEvents.afterAssemblyReload += OnAfterAssemblyReload;
+#endif
+        }
+
+        private void OnDisable() {
+#if UNITY_EDITOR
+            UnityEditor.AssemblyReloadEvents.afterAssemblyReload -= OnAfterAssemblyReload;
+#endif
+        }
+
+        // todo: Material.SetBuffer()设置的绑定关系是非持久的 (non-persistent), 当按下Ctrl+R刷新时, 需要重新绑定数据
+        private void OnAfterAssemblyReload() {
+            // todo...
+        }
+
         private void Update() {
             if (supportsComputeShaders == false) {
                 return;
@@ -335,7 +353,6 @@ namespace IcoSphere {
             NativeArray<byte> pixelData = tex.GetPixelData<byte>(0); // mip level 0
             int w = tex.width;
             int h = tex.height;
-            int stride = w * 4;
 
             Pack pack = Pack.Read(recursion);
             int n = pack.tris.Length;
@@ -350,6 +367,7 @@ namespace IcoSphere {
                 MappingInstanceDataCol(data, hexRgbIdDict, pixelData, data[i].v1, w, h);
                 MappingInstanceDataCol(data, hexRgbIdDict, pixelData, data[i].v2, w, h);
             }
+            FreeBuf(ref allBuf);
             allBuf = ComputeBufManager.NewBuf(n, Marshal.SizeOf(typeof(InstanceData)));
             allBuf.SetData(data);
             computeShader.SetBuffer(kernelMainId, "_AllInstancesData", allBuf);
