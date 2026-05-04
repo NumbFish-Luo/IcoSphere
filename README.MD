@@ -269,16 +269,10 @@ A：这是已知问题（热重载后 Material 绑定丢失），将在后续实
 
 #### 3.2.8 todo...
 
-- **优化视锥剔除包围球半径**
-  当前半径计算可能偏小，导致部分可见三角形被误剔除。建议改用外接圆半径 `r = max(l01,l12,l20) / sqrt(3)` 并实测调整。
 - **实现热重载后材质的 Buffer 重新绑定**
   完善 `IcoSphere.OnAfterAssemblyReload()`，在编辑器重新编译后重新调用 `mat.SetBuffer` 等，避免渲染丢失。
-- **移除 ComputeBufManager 中的不必要的 lock**
-  所有调用位于主线程，可移除 `lock` 简化代码。
 - **完成光照渲染**
   在 Shader 中加入基于法线的光照模型（如 Lambert/Blinn-Phong），并根据项目需求添加阴影支持。
-- **为纹理映射的“顶点颜色复用”添加注释**
-  在 `IcoSphere.cs` 中 `InstanceData.col` 以及 `MappingTex` 相关代码处添加清晰注释，避免维护者误解。
 
 ## 四、Todo
 

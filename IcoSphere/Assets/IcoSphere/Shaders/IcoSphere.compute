@@ -1,5 +1,4 @@
 #pragma kernel Main
-#pragma kernel Mapping
 
 struct InstanceData {
     uint id; // 三角形id
@@ -39,9 +38,6 @@ float3 _CamPos;
 float _InstanceRadius;
 float3 _RayOrigin;
 float3 _RayDir;
-
-// input: Mapping
-Texture2D<float4> _MappingTex; // 地图映射
 
 // output: Main
 AppendStructuredBuffer<InstanceData> _VisibleInstancesData;
@@ -199,12 +195,14 @@ void Main(uint3 id : SV_DispatchThreadID) {
     }
 
     // 视锥剔除
-    float3 o = (v0 + v1 + v2) / 3.0f;
+    float3 o = (v0 + v1 + v2) / 3.0;
     float3 n = normalize(cross(v1 - v0, v2 - v0)); // 3点确定法线
     float l01 = length(v0 - v1);
     float l12 = length(v1 - v2);
     float l20 = length(v2 - v0);
-    float r = _InstanceRadius * max(max(l01, l12), l20) * 0.5f;
+    // 实测3.0倍时移动相机不会出现剔除过多内容, 后续需要根据需求调整此值, 值越小性能相对越好
+    const float R_SCALE = 3.0;
+    float r = _InstanceRadius * max(max(l01, l12), l20) * R_SCALE;
     if (IsVisible(o, n, r) == false) {
         return;
     }
@@ -226,9 +224,4 @@ void Main(uint3 id : SV_DispatchThreadID) {
     }
 
     _VisibleInstancesData.Append(data);
-}
-
-[numthreads(64, 1, 1)]
-void Mapping(uint3 id : SV_DispatchThreadID) {
-    
 }

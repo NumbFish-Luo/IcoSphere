@@ -25,9 +25,7 @@ namespace IcoSphere {
         private ComputeBuffer drawHexBuf;
         private ComputeBuffer argsBuf;
         private const string kernelMainName = "Main";
-        private const string kernelMappingName = "Mapping";
         private int kernelMainId;
-        private int kernelMappingId;
         private float instanceRadius;
         private readonly uint[] args = new uint[5] { 0, 0, 0, 0, 0 };
 
@@ -50,6 +48,8 @@ namespace IcoSphere {
             public Vector4 c01;
             public Vector4 c12;
             public Vector4 c20;
+
+            // todo: 将col移动到别的结构体, 避免混淆
             public Vector4 col; // rgb: 颜色, a: 国家id. 需要注意的是, 实际上这个存的是顶点的颜色值 (相当于六边形颜色值), 而不是三角形的颜色值!
         }
 
@@ -244,11 +244,6 @@ namespace IcoSphere {
             kernelMainId = computeShader.FindKernel(kernelMainName);
             if (kernelMainId < 0) {
                 throw new Exception("Failed to find kernel '" + kernelMainName + "'");
-            }
-
-            kernelMappingId = computeShader.FindKernel(kernelMappingName);
-            if (kernelMainId < 0) {
-                throw new Exception("Failed to find kernel '" + kernelMappingName + "'");
             }
 
             // 输入: Main

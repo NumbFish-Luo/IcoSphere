@@ -52,9 +52,7 @@ namespace IcoSphere {
             }
 
             ComputeBuffer buf = new(count, stride, type);
-            lock (trackeds) {
-                trackeds.Add(buf);
-            }
+            trackeds.Add(buf);
 
             return buf;
         }
@@ -63,10 +61,7 @@ namespace IcoSphere {
             if (buf == null) {
                 return;
             }
-
-            lock (pendingReleases) {
-                pendingReleases.Enqueue(buf);
-            }
+            pendingReleases.Enqueue(buf);
         }
 
         private static void ReleaseImmediate(ComputeBuffer buf) {
@@ -74,10 +69,8 @@ namespace IcoSphere {
                 return;
             }
 
-            lock (trackeds) {
-                if (trackeds.Contains(buf)) {
-                    trackeds.Remove(buf);
-                }
+            if (trackeds.Contains(buf)) {
+                trackeds.Remove(buf);
             }
 
             try {
@@ -95,37 +88,31 @@ namespace IcoSphere {
             int maxReleasePerFrame = 10;
             int released = 0;
 
-            lock (pendingReleases) {
-                while (pendingReleases.Count > 0 && released < maxReleasePerFrame) {
-                    ComputeBuffer buf = pendingReleases.Dequeue();
-                    if (buf != null) {
-                        ReleaseImmediate(buf);
-                        ++released;
-                    }
+            while (pendingReleases.Count > 0 && released < maxReleasePerFrame) {
+                ComputeBuffer buf = pendingReleases.Dequeue();
+                if (buf != null) {
+                    ReleaseImmediate(buf);
+                    ++released;
                 }
             }
         }
 
         private static void ForceReleaseAll() {
-            lock (trackeds) {
-                foreach (ComputeBuffer b in trackeds) {
-                    try {
-                        b?.Release();
-                    } catch {
-                        // ...
-                    }
+            foreach (ComputeBuffer b in trackeds) {
+                try {
+                    b?.Release();
+                } catch {
+                    // ...
                 }
-                trackeds.Clear();
             }
+            trackeds.Clear();
 
-            lock (pendingReleases) {
-                while (pendingReleases.Count > 0) {
-                    ComputeBuffer b = pendingReleases.Dequeue();
-                    try {
-                        b?.Release();
-                    } catch {
-                        // ...
-                    }
+            while (pendingReleases.Count > 0) {
+                ComputeBuffer b = pendingReleases.Dequeue();
+                try {
+                    b?.Release();
+                } catch {
+                    // ...
                 }
             }
         }
