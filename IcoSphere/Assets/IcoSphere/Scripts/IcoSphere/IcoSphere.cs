@@ -336,6 +336,31 @@ namespace IcoSphere {
             drawHexBuf.SetData(inDrawHexData);
         }
 
+        public bool TryGetRayHexCountryId(out uint countryId, out uint hexId, out RayData rayData) {
+            countryId = 0;
+            hexId = 0;
+            rayData = new();
+
+            if (rayBuf == null || allBuf == null || triNum <= 0) {
+                return false;
+            }
+
+            RayData[] rayResult = new RayData[1];
+            rayBuf.GetData(rayResult);
+            rayData = rayResult[0];
+
+            if (rayData.tid >= triNum || rayData.vid >= triNum) {
+                return false;
+            }
+
+            InstanceData[] hexData = new InstanceData[1];
+            allBuf.GetData(hexData, 0, (int)rayData.vid, 1);
+
+            hexId = rayData.vid;
+            countryId = (uint)Mathf.RoundToInt(hexData[0].col.w);
+            return true;
+        }
+
         // hexRgbIdDict: <hexRgb, id>
         public void MappingTex(Texture2D tex, Dictionary<uint, uint> hexRgbIdDict) {
             Debug.Log(Misc.ToLonLat(new Vector3(1, 0, 0)));

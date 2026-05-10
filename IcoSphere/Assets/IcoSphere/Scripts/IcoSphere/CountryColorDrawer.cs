@@ -29,6 +29,8 @@ namespace IcoSphere {
         private readonly Dictionary<string, CountrySetting> countrySettingsDict = new();
         private string preCountryName = null;
 
+        public IcoSphere TargetIcoSphere => icoSphere;
+
         private void Awake() {
             InitDict();
             SetRayHexColor();
@@ -76,6 +78,15 @@ namespace IcoSphere {
                 }
             }
             return outCs;
+        }
+
+        public CountrySetting GetCountrySettingById(uint id) {
+            foreach (CountrySetting cs in countrySettings) {
+                if (cs.id == id) {
+                    return cs;
+                }
+            }
+            return new();
         }
 
         public bool AddCountrySetting(CountrySetting cs) {
