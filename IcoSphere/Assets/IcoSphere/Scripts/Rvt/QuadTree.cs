@@ -95,27 +95,46 @@ namespace IcoSphere {
             return root;
         }
 
+        // 每帧更新所有叶节点状态
         public static void UpdateAllLeavesState(Vector2 camPos) {
             splitCount = 0;
             nextAllLeaves.Clear();
 
+            // 遍历所有当前叶节点, 检查lod是否发生变化
+            // 如果没有变化就放入下一帧叶节点队列 (在UpdateState函数中执行放入操作)
+            // 如果变化, 根据变大还是变小来做合并还是细分的处理
             while (currentAllLeaves.Count > 0) {
                 var node = currentAllLeaves.Dequeue();
                 node.UpdateState(camPos);
             }
 
             // 交换两个元素的语法糖, 元组交换
+            // 避免new一个空队列产生GC
             (nextAllLeaves, currentAllLeaves) = (currentAllLeaves, nextAllLeaves);
         }
 
         // -------- 成员函数 --------
+        // 对于每个节点, 首先要判断他的父节点是否需要合并
+        //
+        // 如果自己和其他3兄弟节点都没子节点
+        // 且父节点计算后lod发现应该合并
+        // 那么才执行合并
+        // 并且设置每个子节点的parentMerged为true
+        //
+        // 如果不能合并, 再判断自己是维持到下一帧还是细分
+        // 细分也有很多约束...细节的考量很花时间
         private void UpdateState(Vector2 camPos) {
             if (parentMerged) {
                 return;
             }
 
+            // 优先判断父节点是否可合并
+            // 是否可合并不是判断自己的
+            // 否则其他3兄弟lod算出来要合并
+            // 而该节点算出来不合并, 就需要通讯很复杂
+            // 所以都用父节点位置和尺寸统一判断
             if (parent != null) {
-                int parent_lodSize = parent.CalculateLodSize(camPos);
+                int parent_lodSize = parent.CalcLodSize(camPos);
                 bool allBrothersAreLeaf = true;
                 for (int i = 0; i < 4; i++) {
                     if (parent.children[i].IsLeaf == false) allBrothersAreLeaf = false;
@@ -126,18 +145,18 @@ namespace IcoSphere {
                 }
             }
 
-            int lodSize = CalculateLodSize(camPos);
+            int lodSize = CalcLodSize(camPos);
 
-            //当前尺寸刚好符合  lod需要的尺寸 自己保持为叶子 不动
             if (size == lodSize) {
+                // 当前尺寸刚好符合lod需要的尺寸, 自己保持为叶子不动
                 nextAllLeaves.Enqueue(this);
-            }
-            //当前尺寸 大于 lod需要的尺寸 需要细分出4个子对象
-            else if (size > lodSize) {
-                //不马上细分 而是合并完了再细分 这样 同时存在的叶子数就比较小 否则需要更多的对象数量
+            } else if (size > lodSize) {
+                // 当前尺寸大于lod需要的尺寸, 需要细分出4个子对象
+                // 不马上细分, 而是合并完了再细分
+                // 这样同时存在的叶子数就比较小
+                // 否则需要更多的对象数量
                 if (splitCount++ < eventFrameSplitCountMax && physicEmptyIndexQueue.Count >= 3) {
                     Split();
-
                 } else {
                     nextAllLeaves.Enqueue(this);
                 }
@@ -146,13 +165,28 @@ namespace IcoSphere {
             }
         }
 
-        // 细分node 给自己增加4个子node 但自己不算做叶子 所以不放队列
+        // 合并node, 队列放入parent不放自己, 并跳过后面3个同级node计算, 也就不会放入队列
+        private void Merge() {
+            nextAllLeaves.Enqueue(this);
+            for (int i = 0; i < 4; i++) {
+                ResetPhysicIndex(children[i]);
+                children[i].parent = null;
+                children[i].parentMerged = true;
+            }
+
+            // 回收子对象物理索引, 分配自己一个地址索引然后加载这个索引对应的资源
+            physicTexIndex = DequeuePhysicIndex();
+            onLoadData(this);
+            children = null;
+        }
+
+        // 细分node, 给自己增加4个子node, 但自己不算做叶子, 所以不放队列
         private void Split() {
             ResetPhysicIndex(this);
 
             children = new QuadTree[4];
 
-            //为了可读性 这里坐标设置 不写循环里, 也不做成对象池， 后面最好做下
+            // 为了可读性, 这里坐标设置不写循环里, 也不做成对象池, 后面最好做下
             children[0] = new QuadTree() { x = x, z = z };
             children[1] = new QuadTree() { x = x + size / 2, z = z };
             children[2] = new QuadTree() { x = x, z = z + size / 2 };
@@ -163,54 +197,23 @@ namespace IcoSphere {
                 children[i].physicTexIndex = DequeuePhysicIndex();
                 nextAllLeaves.Enqueue(children[i]);
                 onLoadData(children[i]);
-
             }
         }
 
-        // 合并node  队列放入parent 不放自己，并跳过后面3个同级node计算 也就不会放入队列
-        private void Merge() {
-            nextAllLeaves.Enqueue(this);
+        // 不论合并还是细分, 每帧都只执行一次, 这样很好的天然实现了分帧处理
+        // 如果要更好的效果, 还需要设置权重决定处理的顺序
+        // 比如近的优先, 或lod变大的优先
+        // 还有一个小技巧就是先回收索引资源, 然后再分配
+        // 这样减少一点点资源不足的情况
 
-            //var tempParent = parent;
-            for (int i = 0; i < 4; i++) {
-                ResetPhysicIndex(children[i]);
-                children[i].parent = null;
-                children[i].parentMerged = true;
-
-            }
-            physicTexIndex = DequeuePhysicIndex();
-            onLoadData(this);
-            children = null;
-
-            //Node[] brothers = parent.children;
-
-            //parent.children = null;
-
-            //nextAllLeaves.Enqueue(parent);
-            //onLoadData(parent);
-            //var tempParent = parent;
-            //for (int i = 0; i < 4; i++)
-            //{
-            //    resetPhysicIndex(brothers[i]);
-            //    brothers[i].parent = null;
-            //}
-            //tempParent.physicTexIndex = getPhysicIndex();
-
-            //currentAllLeaves.Dequeue();
-            //currentAllLeaves.Dequeue();
-            //currentAllLeaves.Dequeue();
-        }
-
-        private int CalculateLodSize(Vector2 camPos) {
-            var dis = CalculateClosestPoint(camPos, new Vector2(x + size / 2, z + size / 2), new Vector2(size / 2, size / 2));
+        private int CalcLodSize(Vector2 camPos) {
+            var dis = CalcClosestPoint(camPos, new Vector2(x + size / 2, z + size / 2), new Vector2(size / 2, size / 2));
             dis = Mathf.Max(1, Mathf.Sqrt(dis));
-            // int lod = Mathf.Max(0, (int)(Mathf.Log(dis, 2) + 0.5));
             int lod = Mathf.Max(0, (int)(Mathf.Log(dis, 2) + 0.5));
-
             return 1 << lod;
         }
 
-        float CalculateClosestPoint(Vector2 pos, Vector2 centerPos, Vector2 aabbExt) {
+        float CalcClosestPoint(Vector2 pos, Vector2 centerPos, Vector2 aabbExt) {
             // compute coordinates of point in box coordinate system
             Vector2 closestPos = pos - centerPos;
 

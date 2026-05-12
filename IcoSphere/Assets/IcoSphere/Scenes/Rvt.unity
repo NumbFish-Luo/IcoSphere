@@ -332,6 +332,73 @@ MonoBehaviour:
   m_LightCookieSize: {x: 1, y: 1}
   m_LightCookieOffset: {x: 0, y: 0}
   m_SoftShadowQuality: 0
+--- !u!1 &1180026128
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1180026129}
+  - component: {fileID: 1180026130}
+  - component: {fileID: 1180026131}
+  m_Layer: 0
+  m_Name: Rvt
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1180026129
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1180026128}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1180026130
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1180026128}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: caa5d21c47517724b9dee9f89720af2a, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  rootSize: 1024
+  terrainOffset: {x: 0, y: 0, z: 0}
+  indexGenerator: {fileID: 7200000, guid: 40595050afd60184aa9f0f555e31f82b, type: 3}
+  indexRT: {fileID: 0}
+--- !u!114 &1180026131
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1180026128}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: af10db5aedbf5514c92ea3a16336fd75, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  captureShader: {fileID: 4800000, guid: 76161d24c6adb2941a58c77b4649e6ce, type: 3}
+  terrainData: {fileID: 0}
+  albedoAtlas: {fileID: 0}
+  normalAtlas: {fileID: 0}
+  clipRTs: []
+  mipmapCount: 0
 --- !u!1 &2031016759
 GameObject:
   m_ObjectHideFlags: 0
@@ -343,7 +410,7 @@ GameObject:
   - component: {fileID: 2031016761}
   - component: {fileID: 2031016760}
   m_Layer: 0
-  m_Name: GameObject
+  m_Name: CommonTest
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -383,3 +450,4 @@ SceneRoots:
   - {fileID: 223434141}
   - {fileID: 1124977918}
   - {fileID: 2031016761}
+  - {fileID: 1180026129}

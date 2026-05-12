@@ -18,7 +18,6 @@ namespace IcoSphere {
         private bool supportsComputeShaders;
         private Camera cam;
         private Mesh mesh;
-        private int triNum;
         private ComputeBuffer allBuf;
         private ComputeBuffer visibleBuf;
         private ComputeBuffer rayBuf;
@@ -28,6 +27,8 @@ namespace IcoSphere {
         private int kernelMainId;
         private float instanceRadius;
         private readonly uint[] args = new uint[5] { 0, 0, 0, 0, 0 };
+        private Pack pack;
+        private InstanceData[] data;
 
         public float SphereRadius => sphereRadius;
 
@@ -109,7 +110,7 @@ namespace IcoSphere {
                 computeShader.SetFloat("_MaxDistance", cam.farClipPlane);
                 computeShader.SetVector("_CamPos", camPos);
                 computeShader.SetFloat("_InstanceRadius", instanceRadius);
-                computeShader.SetInt("_MaxNum", triNum);
+                computeShader.SetInt("_MaxNum", pack.tris.Length);
 
                 // 射线检测
                 Ray ray = cam.ScreenPointToRay(Input.mousePosition);
@@ -118,7 +119,7 @@ namespace IcoSphere {
 
                 // 执行剔除
                 visibleBuf.SetCounterValue(0);
-                int threadGroups = Mathf.CeilToInt(triNum / 64.0f);
+                int threadGroups = Mathf.CeilToInt(pack.tris.Length / 64.0f);
                 computeShader.Dispatch(kernelMainId, threadGroups, 1, 1);
                 ComputeBuffer.CopyCount(visibleBuf, argsBuf, sizeof(uint));
 
@@ -161,8 +162,7 @@ namespace IcoSphere {
                 return;
             }
 
-            Pack pack = Pack.Read(recursion);
-
+            pack = Pack.Read(recursion);
             FreeBufs();
             NewBufs(pack);
         }
@@ -207,23 +207,22 @@ namespace IcoSphere {
 
         private RayData[] NewDefaultRayData() {
             RayData[] result = new RayData[1];
-            result[0].tid = (uint)triNum;
+            result[0].tid = (uint)pack.tris.Length;
             return result;
         }
 
         private DrawHexData[] NewDefaultDrawHexData() {
             DrawHexData[] result = new DrawHexData[1];
-            result[0].id = (uint)triNum;
+            result[0].id = (uint)pack.tris.Length;
             result[0].col = Color.clear;
             return result;
         }
 
         private void NewBufs(Pack p) {
             int n = p.tris.Length;
-            triNum = n;
-            List<InstanceData> data = new(n);
+            data = new InstanceData[n];
             for (uint i = 0; i < n; ++i) {
-                data.Add(NewInstanceData(p, i));
+                data[i] = NewInstanceData(p, i);
             }
             int stride = Marshal.SizeOf(typeof(InstanceData));
             allBuf = ComputeBufManager.NewBuf(n, stride);
@@ -341,7 +340,7 @@ namespace IcoSphere {
             hexId = 0;
             rayData = new();
 
-            if (rayBuf == null || allBuf == null || triNum <= 0) {
+            if (rayBuf == null || allBuf == null || pack.tris.Length <= 0) {
                 return false;
             }
 
@@ -349,7 +348,7 @@ namespace IcoSphere {
             rayBuf.GetData(rayResult);
             rayData = rayResult[0];
 
-            if (rayData.tid >= triNum || rayData.vid >= triNum) {
+            if (rayData.tid >= pack.tris.Length || rayData.vid >= pack.tris.Length) {
                 return false;
             }
 
@@ -374,18 +373,17 @@ namespace IcoSphere {
             int w = tex.width;
             int h = tex.height;
 
-            Pack pack = Pack.Read(recursion);
+            pack = Pack.Read(recursion);
             int n = pack.tris.Length;
-            triNum = n;
-            InstanceData[] data = new InstanceData[n];
+            data = new InstanceData[n];
             for (uint i = 0; i < n; ++i) {
                 data[i] = NewInstanceData(pack, i);
             }
             // 映射国家颜色值
             for (uint i = 0; i < n; ++i) {
-                MappingInstanceDataCol(data, hexRgbIdDict, pixelData, data[i].v0, w, h);
-                MappingInstanceDataCol(data, hexRgbIdDict, pixelData, data[i].v1, w, h);
-                MappingInstanceDataCol(data, hexRgbIdDict, pixelData, data[i].v2, w, h);
+                MappingInstanceDataCol(hexRgbIdDict, pixelData, data[i].v0, w, h);
+                MappingInstanceDataCol(hexRgbIdDict, pixelData, data[i].v1, w, h);
+                MappingInstanceDataCol(hexRgbIdDict, pixelData, data[i].v2, w, h);
             }
             FreeBuf(ref allBuf);
             allBuf = ComputeBufManager.NewBuf(n, Marshal.SizeOf(typeof(InstanceData)));
@@ -394,7 +392,7 @@ namespace IcoSphere {
             mat.SetBuffer("_AllInstancesData", allBuf);
         }
 
-        private void MappingInstanceDataCol(InstanceData[] data, Dictionary<uint, uint> hexRgbIdDict, NativeArray<byte> pixelData, Vector4 v, int w, int h) {
+        private void MappingInstanceDataCol(Dictionary<uint, uint> hexRgbIdDict, NativeArray<byte> pixelData, Vector4 v, int w, int h) {
             Vector2 uv = Misc.ToLonLatUv(v);
             int x = (int)(uv.x * w);
             int y = (int)(uv.y * h);
@@ -409,7 +407,7 @@ namespace IcoSphere {
         }
 
         public void SaveAllBufData(string path) {
-            InstanceData[] data = new InstanceData[triNum];
+            InstanceData[] data = new InstanceData[pack.tris.Length];
             allBuf.GetData(data);
 
             string directory = Path.GetDirectoryName(path);
@@ -454,6 +452,63 @@ namespace IcoSphere {
             }
             allBuf.SetData(result.ToArray());
             return true;
+        }
+
+        // -------- 方便外部应用的API --------
+
+        // 返回地块总数 (六边形/五边形数量)
+        public int GetAreaCount() {
+            return pack.verts.Length;
+        }
+
+        // 判断areaId是否有效, 用于避免点击、寻路、读档时传入非法id
+        public bool IsValidAreaId(int areaId) {
+            return areaId >= 0 && areaId <= pack.verts.Length;
+        }
+
+        // 返回某个地块中心点的世界坐标
+        public Vector3 GetAreaCenter(int areaId) {
+            return pack.verts[areaId];
+        }
+
+        // 返回某个地块中心点的球面外法线, 用途：让单位、图标、模型能正确贴在球面上
+        public Vector3 GetAreaNormal(int areaId) {
+            return pack.verts[areaId].normalized;
+        }
+
+        // 返回某个地块的相邻地块数量, 六边形是6, 五边形是5 (少数)
+        public int GetNeighborCount(int areaId) {
+            Abut a = pack.abuts[areaId].A(5);
+            return a[0] < 0 ? 5 : 6;
+        }
+
+        // 返回某个相邻地块id, neighborIndex的范围是0到GetNeighborCount(areaId) - 1
+        public int GetNeighborId(int areaId, int neighborIndex) {
+            return pack.abuts[areaId].V(neighborIndex);
+        }
+
+        // 用射线拾取地块
+        // 如果命中地块, 返回true, 并输出areaId
+        // 如果没有命中地块, 返回false
+        [Obsolete] public bool TryPickArea(Ray ray, out int areaId) {
+            // todo: ...
+            areaId = 0;
+            return false;
+        }
+
+        // 设置单个地块颜色, 用途: 选中高亮、归属变化等
+        [Obsolete] public void SetAreaColor(int areaId, Color color) {
+            // todo: ...
+        }
+
+        // 批量设置多个地块为同一种颜色, 用途：初始化国家颜色、刷新地图模式等
+        [Obsolete] public void SetAreaColors(int[] areaIds, Color color) {
+            // todo: ...
+        }
+
+        // 清除单个地块的特殊颜色, 并恢复默认颜色
+        [Obsolete] public void ClearAreaColor(int areaId) {
+            // todo: ...
         }
     }
 }
