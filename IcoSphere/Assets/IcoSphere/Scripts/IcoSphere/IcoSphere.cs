@@ -468,7 +468,7 @@ namespace IcoSphere {
 
         // 返回某个地块中心点的世界坐标
         public Vector3 GetAreaCenter(int areaId) {
-            return pack.verts[areaId];
+            return pack.verts[areaId] * sphereRadius;
         }
 
         // 返回某个地块中心点的球面外法线, 用途：让单位、图标、模型能正确贴在球面上
@@ -478,12 +478,15 @@ namespace IcoSphere {
 
         // 返回某个地块的相邻地块数量, 六边形是6, 五边形是5 (少数)
         public int GetNeighborCount(int areaId) {
-            Abut a = pack.abuts[areaId].A(5);
+            Abut a = pack.abuts[areaId].A(0);
             return a[0] < 0 ? 5 : 6;
         }
 
         // 返回某个相邻地块id, neighborIndex的范围是0到GetNeighborCount(areaId) - 1
         public int GetNeighborId(int areaId, int neighborIndex) {
+            if (GetNeighborCount(areaId) <= 5) {
+                ++neighborIndex;
+            }
             return pack.abuts[areaId].V(neighborIndex);
         }
 
