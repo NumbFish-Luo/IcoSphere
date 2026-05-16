@@ -5,6 +5,15 @@ Shader "Custom/ComputeShader/Tri" {
         _Radius ("Radius", Float) = 1.0
         _LineWidth ("Line Width", Float) = 0.0003
         _RayHexCol ("Ray Hex Col", Color) = (1.0, 1.0, 1.0, 1.0)
+        _UseRvt ("Use RVT", Float) = 0.0
+        [NoScaleOffset] _RvtIndexTex ("RVT Index Texture", 2D) = "black" {}
+        [NoScaleOffset] _RvtAlbedoTexArray ("RVT Albedo Array", 2DArray) = "" {}
+        _RvtIndexMaxLevel ("RVT Index Max Level", Float) = 0.0
+        _RvtTileSize ("RVT Tile Size", Float) = 128.0
+        _RvtPaddedTileSize ("RVT Padded Tile Size", Float) = 136.0
+        _RvtPaddingPixels ("RVT Padding Pixels", Float) = 4.0
+        _RvtGeneratedMipCount ("RVT Generated Mip Count", Float) = 1.0
+        _RvtMipBias ("RVT Mip Bias", Float) = 0.0
     }
     SubShader {
         Tags {
@@ -83,6 +92,10 @@ Shader "Custom/ComputeShader/Tri" {
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
+            TEXTURE2D(_RvtIndexTex);
+            SAMPLER(sampler_RvtIndexTex);
+            TEXTURE2D_ARRAY(_RvtAlbedoTexArray);
+            SAMPLER(sampler_RvtAlbedoTexArray);
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseMap_ST;
@@ -90,6 +103,13 @@ Shader "Custom/ComputeShader/Tri" {
                 float _Radius;
                 float _LineWidth;
                 half4 _RayHexCol;
+                float _UseRvt;
+                float _RvtIndexMaxLevel;
+                float _RvtTileSize;
+                float _RvtPaddedTileSize;
+                float _RvtPaddingPixels;
+                float _RvtGeneratedMipCount;
+                float _RvtMipBias;
             CBUFFER_END
 
             // 将p投影到平面上, 已知这个平面的法线n, 以及这个平面上的一个点q
@@ -195,12 +215,37 @@ Shader "Custom/ComputeShader/Tri" {
                 return abs(2.0 * (x * 0.5 - floor(0.5 + x * 0.5)));
             }
 
-            // 世界坐标转经纬度
-            // 经度 (Longitude): (-1.0, 1.0] * pi
-            // 纬度  (Latitude): (-0.5, 0.5] * pi
-            float2 ToLonLat(float3 p) {
+            float2 ToLonLatUv(float3 p) {
+                const float RVT_PI = 3.14159265359;
                 p = normalize(p);
-                return float2(atan2(p.y, p.x), asin(p.z));
+                float2 lonLat = float2(atan2(p.z, p.x), asin(p.y)) / RVT_PI;
+                return float2((lonLat.x + 1.0) * 0.5, lonLat.y + 0.5);
+            }
+
+            float4 SampleRvtAlbedo(float3 worldPos, float4 fallbackColor) {
+                if (_UseRvt <= 0.5) {
+                    return fallbackColor;
+                }
+
+                float2 virtualUv = ToLonLatUv(worldPos);
+                float4 payload = SAMPLE_TEXTURE2D(_RvtIndexTex, sampler_RvtIndexTex, virtualUv);
+                if (payload.x < -0.5 || payload.w <= 0.0) {
+                    return fallbackColor;
+                }
+
+                float indexResolution = exp2(_RvtIndexMaxLevel);
+                float2 indexCoord = virtualUv * indexResolution;
+                float2 tileUv = saturate((indexCoord - payload.yz) / payload.w);
+                float2 physicalUv = (_RvtPaddingPixels + tileUv * _RvtTileSize) / max(_RvtPaddedTileSize, 1.0);
+
+                float2 dx = ddx(indexCoord);
+                float2 dy = ddy(indexCoord);
+                float footprint = max(length(dx), length(dy));
+                float mip = log2(max(footprint, 1e-5)) + _RvtMipBias;
+                mip = clamp(mip, 0.0, max(_RvtGeneratedMipCount - 1.0, 0.0));
+
+                uint layer = (uint)round(payload.x);
+                return SAMPLE_TEXTURE2D_ARRAY_LOD(_RvtAlbedoTexArray, sampler_RvtAlbedoTexArray, physicalUv, layer, mip);
             }
 
             float FloatEqual(float a, float b) {
@@ -239,6 +284,7 @@ Shader "Custom/ComputeShader/Tri" {
                     vid = i.v2.w;
                 }
                 col.rgb = _AllInstancesData[vid].col.rgb;
+                col = SampleRvtAlbedo(p, col);
                 col = lerp(col, colLine, l);
 
                 float t = (sin(_Time.y) + 1.0) * 0.5;
