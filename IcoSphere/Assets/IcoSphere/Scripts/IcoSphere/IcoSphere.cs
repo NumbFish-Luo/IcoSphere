@@ -491,9 +491,6 @@ namespace IcoSphere {
 
         // 返回某个相邻地块id, neighborIndex的范围是0到GetNeighborCount(areaId) - 1
         public int GetNeighborId(int areaId, int neighborIndex) {
-            if (GetNeighborCount(areaId) <= 5) {
-                ++neighborIndex;
-            }
             return pack.abuts[areaId].V(neighborIndex);
         }
 
