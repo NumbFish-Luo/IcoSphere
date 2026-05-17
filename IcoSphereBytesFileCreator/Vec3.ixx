@@ -9,6 +9,8 @@ using std::ostream;
 using std::string;
 using std::format;
 using std::sqrt;
+using std::cout;
+using std::endl;
 
 namespace Math {
     export class Vec3 {

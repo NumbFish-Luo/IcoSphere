@@ -17,6 +17,7 @@ using std::string;
 using std::vformat;
 using std::make_format_args;
 using std::pair;
+using std::sort;
 using Mesh::Abut;
 
 namespace IcoSphere {
@@ -77,8 +78,17 @@ namespace IcoSphere {
             while (kvs.size() < KVS_MAX_SIZE) {
                 kvs.push_back({ -1, {} });
             }
-            std::sort(kvs.begin(), kvs.end(), [](const Kv& l, const Kv& r) {
-                return l.first < r.first;
+            // 从小到大排序, 但对于-1这种默认值(非法值), 会被排序到最后面
+            sort(kvs.begin(), kvs.end(), [](const Kv& l, const Kv& r) {
+                int32_t lf = l.first;
+                int32_t rf = r.first;
+                if (lf < 0) {
+                    lf = INT32_MAX;
+                }
+                if (rf < 0) {
+                    rf = INT32_MAX;
+                }
+                return lf < rf;
             });
             return kvs;
         }

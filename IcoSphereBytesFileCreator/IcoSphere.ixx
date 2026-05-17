@@ -111,9 +111,8 @@ namespace IcoSphere {
                     { 4,  9, 5 }, { 2,  4, 11 }, {  6,  2, 10 }, {  8, 6,  7 }, { 9,  8,  1 }  // 5 adjacent faces
                 };
 
-                // 推算毗邻数据
-                pack.CalcAbuts();
-                pack.CalcCtrs();
+                // 推算所有数据
+                pack.CalcAll();
 
                 // 保存二进制文件
                 pack.Save(GetFilePath(0).c_str());
@@ -160,8 +159,7 @@ namespace IcoSphere {
                 }
 
                 pack.tris = move(trisNew);
-                pack.CalcAbuts();
-                pack.CalcCtrs();
+                pack.CalcAll();
                 pack.Save(GetFilePath(i + 1).c_str());
             }
 

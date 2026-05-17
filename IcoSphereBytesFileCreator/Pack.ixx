@@ -7,19 +7,24 @@ import <iostream>;
 import <vector>;
 import <string>;
 import <fstream>;
+import <format>;
+import <algorithm>;
 import Math.Vec3;
 import Mesh.Tri;
 import Mesh.Abut;
 import IcoSphere.HexAbuts;
+import IcoSphere.PosVert;
 
 using std::cout;
 using std::cerr;
 using std::endl;
 using std::vector;
 using std::string;
-using std::format;
+using std::vformat;
+using std::make_format_args;
 using std::ifstream;
 using std::ofstream;
+using std::sort;
 using Math::Vec3;
 using Mesh::Tri;
 using Mesh::Abut;
@@ -62,6 +67,7 @@ namespace IcoSphere {
         vector<HexAbuts> abuts; // 数量与verts一致
         vector<Vec3> ctrs; // 毗邻三角形中心坐标数组, 数量为tris的3倍, ctr是center的缩写
         vector<Tri> adjTris; // 毗邻三角形序号数组, 数量与tris一致, 每个Tri存储(t01, t12, t20)
+        vector<PosVert> posVerts; // 坐标到顶点id的映射, 坐标是3个float压缩为一个int32_t
 
         // 推算毗邻数据
         void CalcAbuts() {
@@ -135,24 +141,53 @@ namespace IcoSphere {
             }
         }
 
+        // 计算坐标到顶点id映射, 坐标会按xyz大小排序
+        // 之后使用时就能用二分搜索快速查找想要的元素了
+        // 二分搜索复杂度O(log n), 对于一个长度为一百万的数组, 最多需要搜索20 * 3 = 60次就能找到目标元素
+        void CalcPosVerts() {
+            posVerts.clear();
+            size_t n = verts.size();
+            for (size_t i = 0; i < n; ++i) {
+                posVerts.push_back({ verts[i], (int32_t)i });
+            }
+            sort(posVerts.begin(), posVerts.end(), [](const PosVert& l, const PosVert& r) {
+                if (l.p.x != r.p.x) {
+                    return l.p.x < r.p.x;
+                }
+                if (l.p.y != r.p.y) {
+                    return l.p.y < r.p.y;
+                }
+                return l.p.z < r.p.z;
+            });
+        }
+
+        void CalcAll() {
+            CalcAbuts();
+            CalcCtrs();
+            CalcPosVerts();
+        }
+
         string AbutsToStr() const {
             string str = "";
             size_t m = abuts.size();
+            string tmp;
             for (size_t i = 0; i < m; ++i) {
-                str += format("{}: {}\n", i, abuts[i].ToStr());
+                tmp = abuts[i].ToStr();
+                str += vformat("{}: {}\n", make_format_args(i, tmp));
             }
             return str;
         }
 
         // 二进制模型文件格式
-        // Header (5 * int32_t):
-        //   [vertsSize] [trisSize] [abutsSize] [ctrsSize] [adjTrisSize]
+        // Header (6 * int32_t):
+        //   [vertsSize] [trisSize] [abutsSize] [ctrsSize] [adjTrisSize] [posVertsSize]
         // Body:
-        //   verts  : vertsSize   * Vec3          (3 * float)
-        //   tris   : trisSize    * Tri           (3 * int32_t)
-        //   abuts  : abutsSize   * HexAbuts::Kvs (6 * 3 * int32_t)
-        //   ctrs   : ctrsSize    * Vec3          (3 * float)
-        //   adjTris: adjTrisSize * Tri           (3 * int32_t)
+        //   verts   : vertsSize    * Vec3          (3 * float)
+        //   tris    : trisSize     * Tri           (3 * int32_t)
+        //   abuts   : abutsSize    * HexAbuts::Kvs (6 * 3 * int32_t)
+        //   ctrs    : ctrsSize     * Vec3          (3 * float)
+        //   adjTris : adjTrisSize  * Tri           (3 * int32_t)
+        //   posVerts: posVertsSize * PosVert       (3 * float + 1 * int32_t)
         bool Save(const char* filePath) const {
             // 打开文件
             ofstream file{ filePath, std::ios::binary };
@@ -161,24 +196,30 @@ namespace IcoSphere {
                 return false;
             }
 
+            auto Write = [&file]<typename T>(const vector<T>& v) -> void {
+                file.write(BYTE_ADDR_CONST(v.data()), v.size() * sizeof(T));
+            };
+
             // 写入数据头
             vector<int32_t> header = {
                 (int32_t)verts.size(),
                 (int32_t)tris.size(),
                 (int32_t)abutsData.size(),
                 (int32_t)ctrs.size(),
-                (int32_t)adjTris.size()
+                (int32_t)adjTris.size(),
+                (int32_t)posVerts.size()
             };
-            file.write(BYTE_ADDR_CONST(header.data()), 5 * sizeof(int32_t));
+            Write(header);
 
             // 写入字节
-            file.write(BYTE_ADDR_CONST(verts.data()), verts.size() * sizeof(Vec3));
-            file.write(BYTE_ADDR_CONST(tris.data()), tris.size() * sizeof(Tri));
+            Write(verts);
+            Write(tris);
             for (const HexAbuts::Kvs& kvs : abutsData) {
-                file.write(BYTE_ADDR_CONST(kvs.data()), HexAbuts::KVS_MAX_SIZE * sizeof(HexAbuts::Kv));
+                Write(kvs);
             }
-            file.write(BYTE_ADDR_CONST(ctrs.data()), ctrs.size() * sizeof(Vec3));
-            file.write(BYTE_ADDR_CONST(adjTris.data()), adjTris.size() * sizeof(Tri));
+            Write(ctrs);
+            Write(adjTris);
+            Write(posVerts);
 
             // 关闭文件
             file.close();
@@ -194,17 +235,18 @@ namespace IcoSphere {
             }
 
             // 读取数据头
-            vector<int32_t> header = { 0, 0, 0, 0, 0 };
-            file.read(BYTE_ADDR(header.data()), 5 * sizeof(int32_t));
+            vector<int32_t> header = { 0, 0, 0, 0, 0, 0 };
+            file.read(BYTE_ADDR(header.data()), header.size() * sizeof(int32_t));
+
+            auto Read = [&file, &header]<typename T>(size_t i, vector<T>& v) -> void {
+                const size_t size = (size_t)header[i];
+                v = vector<T>(size);
+                file.read(BYTE_ADDR(v.data()), size * sizeof(T));
+            };
 
             // 读取字节
-            const size_t vertsSize = (size_t)header[0];
-            verts = vector<Vec3>(vertsSize);
-            file.read(BYTE_ADDR(verts.data()), vertsSize * sizeof(Vec3));
-
-            const size_t trisSize = (size_t)header[1];
-            tris = vector<Tri>(trisSize);
-            file.read(BYTE_ADDR(tris.data()), trisSize * sizeof(Tri));
+            Read(0, verts);
+            Read(1, tris);
 
             const size_t abutsDataSize = (size_t)header[2];
             abutsData = vector<HexAbuts::Kvs>(abutsDataSize);
@@ -215,13 +257,9 @@ namespace IcoSphere {
                 file.read(BYTE_ADDR(kvs.data()), n * sizeof(HexAbuts::Kv));
             }
 
-            const size_t ctrsSize = (size_t)header[3];
-            ctrs = vector<Vec3>(ctrsSize);
-            file.read(BYTE_ADDR(ctrs.data()), ctrsSize * sizeof(Vec3));
-
-            const size_t adjTrisSize = (size_t)header[4];
-            adjTris = vector<Tri>(adjTrisSize);
-            file.read(BYTE_ADDR(adjTris.data()), adjTrisSize * sizeof(Tri));
+            Read(3, ctrs);
+            Read(4, adjTris);
+            Read(5, posVerts);
 
             // 转换毗邻数据
             DataToAbuts();

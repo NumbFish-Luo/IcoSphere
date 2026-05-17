@@ -463,12 +463,19 @@ namespace IcoSphere {
 
         // 判断areaId是否有效, 用于避免点击、寻路、读档时传入非法id
         public bool IsValidAreaId(int areaId) {
-            return areaId >= 0 && areaId <= pack.verts.Length;
+            return areaId >= 0 && areaId < pack.verts.Length;
         }
 
         // 返回某个地块中心点的世界坐标
         public Vector3 GetAreaCenter(int areaId) {
             return pack.verts[areaId] * sphereRadius;
+        }
+
+        // 返回某个地块中心点的世界坐标
+        // 注意! 这里返回的是原始坐标数据
+        // 如果需要使用, 要自己乘球体半径sphereRadius, 或用GetAreaCenter函数
+        public Vector3 GetRawAreaCenter(int areaId) {
+            return pack.verts[areaId];
         }
 
         // 返回某个地块中心点的球面外法线, 用途：让单位、图标、模型能正确贴在球面上
@@ -488,6 +495,27 @@ namespace IcoSphere {
                 ++neighborIndex;
             }
             return pack.abuts[areaId].V(neighborIndex);
+        }
+
+        // 获取未按坐标排序好的地块列表
+        public Vector3[] GetRawUnsortedAreas() {
+            return pack.verts;
+        }
+
+        // 获取按坐标排序好的地块列表
+        // 注意! 这里PosVert用的是原始坐标数据
+        // 如果需要使用, 要自己乘球体半径sphereRadius
+        public PosVert[] GetRawSortedAreas() {
+            return pack.posVerts;
+        }
+
+        // 尝试通过坐标寻找地块id, 如果没寻找到, 则返回-1
+        public int FindAreaByPos(Vector3 p) {
+            int i = PosVert.BinarySearch(pack.posVerts, p);
+            if (i < 0) {
+                return -1;
+            }
+            return pack.posVerts[i].v;
         }
 
         // 用射线拾取地块

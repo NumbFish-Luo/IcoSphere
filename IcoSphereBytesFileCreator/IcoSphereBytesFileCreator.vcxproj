@@ -139,6 +139,7 @@
     <ClCompile Include="Pack.ixx" />
     <ClCompile Include="Tri.ixx" />
     <ClCompile Include="Vec3.ixx" />
+    <ClCompile Include="PosVert.ixx" />
     <ClCompile Include="VertCache.ixx" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
