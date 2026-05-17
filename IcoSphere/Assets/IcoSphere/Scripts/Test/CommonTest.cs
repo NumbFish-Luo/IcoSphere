@@ -16,7 +16,7 @@ namespace IcoSphere {
                 // 搜索测试
                 Vector3 p = icoSphere.GetRawAreaCenter(12345);
                 PosVert[] s = icoSphere.GetRawSortedAreas();
-                int i = PosVert.BinarySearch(icoSphere.GetRawSortedAreas(), p);
+                int i = icoSphere.FindAreaByPos(p);
                 Debug.Log(s[i].v); // 应该输出12345
             }
         }
