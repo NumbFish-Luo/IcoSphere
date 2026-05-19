@@ -20,6 +20,7 @@ namespace IcoSphere {
         private Mesh mesh;
         private ComputeBuffer allBuf;
         private ComputeBuffer visibleBuf;
+        private ComputeBuffer vertBuf;
         private ComputeBuffer rayBuf;
         private ComputeBuffer drawHexBuf;
         private ComputeBuffer argsBuf;
@@ -28,7 +29,8 @@ namespace IcoSphere {
         private float instanceRadius;
         private readonly uint[] args = new uint[5] { 0, 0, 0, 0, 0 };
         private Pack pack;
-        private InstanceData[] data;
+        private InstanceData[] instanceData;
+        private VertData[] vertData;
 
         public float SphereRadius => sphereRadius;
 
@@ -49,9 +51,12 @@ namespace IcoSphere {
             public Vector4 c01;
             public Vector4 c12;
             public Vector4 c20;
+        }
 
-            // todo: 将col移动到别的结构体, 避免混淆
-            public Vector4 col; // rgb: 颜色, a: 国家id. 需要注意的是, 实际上这个存的是顶点的颜色值 (相当于六边形颜色值), 而不是三角形的颜色值!
+        [StructLayout(LayoutKind.Sequential)]
+        public struct VertData {
+            public Vector4 col; // rgb: 颜色, a: 国家id
+            public Vector4 replace; // rgb: 替换色, a: 插值t
         }
 
         public readonly static Vector4 DEFAULT_COL = new(0.5f, 0.5f, 0.5f, 0.0f);
@@ -220,18 +225,38 @@ namespace IcoSphere {
 
         private void NewBufs(Pack p) {
             int n = p.tris.Length;
-            data = new InstanceData[n];
+
+            // ---- allBuf ----
+            instanceData = new InstanceData[n];
             for (uint i = 0; i < n; ++i) {
-                data[i] = NewInstanceData(p, i);
+                instanceData[i] = NewInstanceData(p, i);
             }
-            int stride = Marshal.SizeOf(typeof(InstanceData));
-            allBuf = ComputeBufManager.NewBuf(n, stride);
-            allBuf.SetData(data);
-            visibleBuf = ComputeBufManager.NewBuf(n, stride, ComputeBufferType.Append);
+            int instanceStride = Marshal.SizeOf(typeof(InstanceData));
+            allBuf = ComputeBufManager.NewBuf(n, instanceStride);
+            allBuf.SetData(instanceData);
+
+            // ---- visibleBuf ----
+            visibleBuf = ComputeBufManager.NewBuf(n, instanceStride, ComputeBufferType.Append);
+
+            // ---- vertBuf ----
+            int m = p.verts.Length;
+            vertData = new VertData[m];
+            for (uint i = 0; i < m; ++i) {
+                vertData[i] = NewVertData(p, i);
+            }
+            int vertStride = Marshal.SizeOf(typeof(VertData));
+            vertBuf = ComputeBufManager.NewBuf(m, vertStride);
+            vertBuf.SetData(vertData);
+
+            // ---- rayBuf ----
             rayBuf = ComputeBufManager.NewBuf(n, Marshal.SizeOf(typeof(RayData)));
             rayBuf.SetData(NewDefaultRayData());
+
+            // ---- drawHexBuf ----
             drawHexBuf = ComputeBufManager.NewBuf(n, Marshal.SizeOf(typeof(DrawHexData)));
             drawHexBuf.SetData(NewDefaultDrawHexData());
+
+            // ---- argsBuf ----
             argsBuf = ComputeBufManager.NewBuf(1, args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
             args[0] = mesh.GetIndexCount(0); // Index Count Per Instance
             args[1] = 0; // Instance Count
@@ -240,18 +265,23 @@ namespace IcoSphere {
             args[4] = 0; // Start Instance Location
             argsBuf.SetData(args);
 
+            // ---- kernelMainId ---- 
             kernelMainId = computeShader.FindKernel(kernelMainName);
             if (kernelMainId < 0) {
                 throw new Exception("Failed to find kernel '" + kernelMainName + "'");
             }
 
-            // 输入: Main
+            // ---- Input: Common ----
             computeShader.SetBuffer(kernelMainId, "_AllInstancesData", allBuf);
             mat.SetBuffer("_AllInstancesData", allBuf);
 
+            computeShader.SetBuffer(kernelMainId, "_VertData", vertBuf);
+            mat.SetBuffer("_VertData", vertBuf);
+
+            // ---- Input: Main ----
             computeShader.SetBuffer(kernelMainId, "_DrawHexData", drawHexBuf);
 
-            // 输出: Main
+            // ---- Output: Main ----
             computeShader.SetBuffer(kernelMainId, "_VisibleInstancesData", visibleBuf);
             mat.SetBuffer("_VisibleInstancesData", visibleBuf);
 
@@ -289,8 +319,14 @@ namespace IcoSphere {
                 v2 = new Vector4(p2.x, p2.y, p2.z, v2),
                 c01 = new Vector4(c01.x, c01.y, c01.z, p.adjTris[i][0]),
                 c12 = new Vector4(c12.x, c12.y, c12.z, p.adjTris[i][1]),
-                c20 = new Vector4(c20.x, c20.y, c20.z, p.adjTris[i][2]),
-                col = DEFAULT_COL
+                c20 = new Vector4(c20.x, c20.y, c20.z, p.adjTris[i][2])
+            };
+        }
+
+        private VertData NewVertData(Pack p, uint i) {
+            return new() {
+                col = DEFAULT_COL,
+                replace = Color.clear
             };
         }
 
@@ -304,6 +340,7 @@ namespace IcoSphere {
         private void FreeBufs() {
             FreeBuf(ref allBuf);
             FreeBuf(ref visibleBuf);
+            FreeBuf(ref vertBuf);
             FreeBuf(ref rayBuf);
             FreeBuf(ref drawHexBuf);
             FreeBuf(ref argsBuf);
@@ -340,7 +377,7 @@ namespace IcoSphere {
             hexId = 0;
             rayData = new();
 
-            if (rayBuf == null || allBuf == null || pack.tris.Length <= 0) {
+            if (rayBuf == null || vertBuf == null || pack.tris.Length <= 0) {
                 return false;
             }
 
@@ -352,105 +389,81 @@ namespace IcoSphere {
                 return false;
             }
 
-            InstanceData[] hexData = new InstanceData[1];
-            allBuf.GetData(hexData, 0, (int)rayData.vid, 1);
+            VertData[] hexData = new VertData[1];
+            vertBuf.GetData(hexData, 0, (int)rayData.vid, 1);
 
             hexId = rayData.vid;
             countryId = (uint)Mathf.RoundToInt(hexData[0].col.w);
             return true;
         }
 
-        // hexRgbIdDict: <hexRgb, id>
+        // hexRgbIdDict: <hexRgb, id>, 例如<#FF0000, 1>
         public void MappingTex(Texture2D tex, Dictionary<uint, uint> hexRgbIdDict) {
-            Debug.Log(Misc.ToLonLat(new Vector3(1, 0, 0)));
-
             if (tex.format != TextureFormat.RGBA32) {
                 Debug.LogWarning("纹理非RGBA32格式, 建议先转换后再调用");
                 Debug.LogWarning("请先阅读README文件修改图片设置");
+                return;
             }
 
             NativeArray<byte> pixelData = tex.GetPixelData<byte>(0); // mip level 0
             int w = tex.width;
             int h = tex.height;
-
-            pack = Pack.Read(recursion);
-            int n = pack.tris.Length;
-            data = new InstanceData[n];
+            int n = pack.verts.Length;
+            vertData = new VertData[n];
             for (uint i = 0; i < n; ++i) {
-                data[i] = NewInstanceData(pack, i);
+                vertData[i] = NewVertData(pack, i);
             }
             // 映射国家颜色值
             for (uint i = 0; i < n; ++i) {
-                MappingInstanceDataCol(hexRgbIdDict, pixelData, data[i].v0, w, h);
-                MappingInstanceDataCol(hexRgbIdDict, pixelData, data[i].v1, w, h);
-                MappingInstanceDataCol(hexRgbIdDict, pixelData, data[i].v2, w, h);
+                Vector2 uv = Misc.ToLonLatUv(pack.verts[i]);
+                int x = (int)(uv.x * w);
+                int y = (int)(uv.y * h);
+                x = Mathf.Clamp(x, 0, w - 1);
+                y = Mathf.Clamp(y, 0, h - 1);
+                int offset = y * w * 4 + x * 4;
+                uint r = pixelData[offset];
+                uint g = pixelData[offset + 1];
+                uint b = pixelData[offset + 2];
+                uint hexRgb = (r << 16) | (g << 8) | b;
+                vertData[i].col = new Vector4(r / 255.0f, g / 255.0f, b / 255.0f, hexRgbIdDict[hexRgb]);
             }
-            FreeBuf(ref allBuf);
-            allBuf = ComputeBufManager.NewBuf(n, Marshal.SizeOf(typeof(InstanceData)));
-            allBuf.SetData(data);
-            computeShader.SetBuffer(kernelMainId, "_AllInstancesData", allBuf);
-            mat.SetBuffer("_AllInstancesData", allBuf);
+            FreeBuf(ref vertBuf);
+            vertBuf = ComputeBufManager.NewBuf(n, Marshal.SizeOf(typeof(VertData)));
+            vertBuf.SetData(vertData);
+            computeShader.SetBuffer(kernelMainId, "_VertData", vertBuf);
+            mat.SetBuffer("_VertData", vertBuf);
         }
 
-        private void MappingInstanceDataCol(Dictionary<uint, uint> hexRgbIdDict, NativeArray<byte> pixelData, Vector4 v, int w, int h) {
-            Vector2 uv = Misc.ToLonLatUv(v);
-            int x = (int)(uv.x * w);
-            int y = (int)(uv.y * h);
-            x = Mathf.Clamp(x, 0, w - 1);
-            y = Mathf.Clamp(y, 0, h - 1);
-            int offset = y * w * 4 + x * 4;
-            uint r = pixelData[offset];
-            uint g = pixelData[offset + 1];
-            uint b = pixelData[offset + 2];
-            uint hexRgb = (r << 16) | (g << 8) | b;
-            data[(uint)v.w].col = new Vector4(r / 255.0f, g / 255.0f, b / 255.0f, hexRgbIdDict[hexRgb]);
-        }
-
-        public void SaveAllBufData(string path) {
-            InstanceData[] data = new InstanceData[pack.tris.Length];
-            allBuf.GetData(data);
-
+        public void SaveVertBufData(string path) {
             string directory = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory)) {
                 Directory.CreateDirectory(directory);
             }
 
+            vertBuf.GetData(vertData);
             using BinaryWriter writer = new(File.Open(path, FileMode.Create));
-            foreach (var d in data) {
-                writer.Write(d.id);
-                writer.Write(d.v0);
-                writer.Write(d.v1);
-                writer.Write(d.v2);
-                writer.Write(d.c01);
-                writer.Write(d.c12);
-                writer.Write(d.c20);
+            foreach (VertData d in vertData) {
                 writer.Write(d.col);
+                // 无需保存.replace
             }
         }
 
-        public bool LoadAllBufData(string path) {
+        public bool LoadVertBufData(string path) {
             if (!File.Exists(path)) {
                 Debug.LogError("LoadAllBufData: 文件不存在 -> " + path);
                 return false;
             }
 
-            var result = new List<InstanceData>();
             using (BinaryReader reader = new(File.OpenRead(path))) {
+                int i = 0;
                 while (reader.BaseStream.Position < reader.BaseStream.Length) {
-                    InstanceData data = new() {
-                        id = reader.ReadUInt32(),
-                        v0 = reader.ReadVec4(),
-                        v1 = reader.ReadVec4(),
-                        v2 = reader.ReadVec4(),
-                        c01 = reader.ReadVec4(),
-                        c12 = reader.ReadVec4(),
-                        c20 = reader.ReadVec4(),
-                        col = reader.ReadVec4()
+                    vertData[i++] = new() {
+                        col = reader.ReadVec4(),
+                        replace = Color.clear
                     };
-                    result.Add(data);
                 }
             }
-            allBuf.SetData(result.ToArray());
+            vertBuf.SetData(vertData);
             return true;
         }
 

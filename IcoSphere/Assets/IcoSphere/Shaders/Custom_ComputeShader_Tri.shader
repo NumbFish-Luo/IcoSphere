@@ -40,7 +40,11 @@ Shader "Custom/ComputeShader/Tri" {
                 float4 c01;
                 float4 c12;
                 float4 c20;
-                float4 col; // rgb: 颜色, a: 国家id. 需要注意的是, 实际上这个存的是顶点的颜色值 (相当于六边形颜色值), 而不是三角形的颜色值!
+            };
+
+            struct VertData {
+                float4 col; // rgb: 颜色, a: 国家id
+                float4 replace; // rgb: 替换色, a: 插值t
             };
 
             struct RayData {
@@ -55,6 +59,7 @@ Shader "Custom/ComputeShader/Tri" {
 
             StructuredBuffer<InstanceData> _AllInstancesData;
             StructuredBuffer<InstanceData> _VisibleInstancesData;
+            StructuredBuffer<VertData> _VertData;
             StructuredBuffer<RayData> _RayResult;
 
             struct Attributes {
@@ -66,7 +71,6 @@ Shader "Custom/ComputeShader/Tri" {
 
             struct Varyings {
                 float4 vertex : SV_POSITION;
-                float4 color : COLOR;
                 float2 uv : TEXCOORD0;
                 float3 posWS : TEXCOORD1;
                 float3 normal : TEXCOORD2;
@@ -140,7 +144,6 @@ Shader "Custom/ComputeShader/Tri" {
                 o.vertex = TransformWorldToHClip(i.vertex.xyz);
 
                 // 传递其他数据
-                o.color = data.col;
                 o.uv = TRANSFORM_TEX(i.uv, _BaseMap);
                 o.v0 = data.v0;
                 o.v1 = data.v1;
@@ -195,14 +198,6 @@ Shader "Custom/ComputeShader/Tri" {
                 return abs(2.0 * (x * 0.5 - floor(0.5 + x * 0.5)));
             }
 
-            // 世界坐标转经纬度
-            // 经度 (Longitude): (-1.0, 1.0] * pi
-            // 纬度  (Latitude): (-0.5, 0.5] * pi
-            float2 ToLonLat(float3 p) {
-                p = normalize(p);
-                return float2(atan2(p.y, p.x), asin(p.z));
-            }
-
             float FloatEqual(float a, float b) {
                 const float EPS = 1e-6;
                 return 1.0 - step(EPS, abs(a - b));
@@ -238,7 +233,7 @@ Shader "Custom/ComputeShader/Tri" {
                 } else if (In180Angle(o, i.c12.xyz - o, i.c20.xyz - o, p) > 0.0) {
                     vid = i.v2.w;
                 }
-                col.rgb = _AllInstancesData[vid].col.rgb;
+                col.rgb = _VertData[vid].col.rgb;
                 col = lerp(col, colLine, l);
 
                 float t = (sin(_Time.y) + 1.0) * 0.5;

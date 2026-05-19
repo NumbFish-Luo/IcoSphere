@@ -28,7 +28,7 @@ namespace IcoSphere {
             }
 
             if (loadBrushDataOnStart) {
-                countryColorDrawer.LoadAllBufData();
+                countryColorDrawer.LoadVertBufData();
             }
         }
 

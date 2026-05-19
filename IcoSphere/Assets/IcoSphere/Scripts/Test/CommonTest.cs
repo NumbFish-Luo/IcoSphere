@@ -31,7 +31,7 @@ namespace IcoSphere {
         }
 
         // 字典测试
-        private Dictionary<Vector3, int> dict = new Dictionary<Vector3, int>();
+        private readonly Dictionary<Vector3, int> dict = new();
         private void TestDict() {
             dict.Clear();
             Vector3[] u = icoSphere.GetRawUnsortedAreas();

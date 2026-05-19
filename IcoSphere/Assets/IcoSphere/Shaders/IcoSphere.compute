@@ -8,7 +8,11 @@ struct InstanceData {
     float4 c01;
     float4 c12;
     float4 c20;
-    float4 col; // rgb: 颜色, a: 国家id. 需要注意的是, 实际上这个存的是顶点的颜色值 (相当于六边形颜色值), 而不是三角形的颜色值!
+};
+
+struct VertData {
+    float4 col; // rgb: 颜色, a: 国家id
+    float4 replace; // rgb: 替换色, a: 插值t
 };
 
 struct RayData {
@@ -28,6 +32,7 @@ struct DrawHexData {
 
 // input: Common
 RWStructuredBuffer<InstanceData> _AllInstancesData;
+RWStructuredBuffer<VertData> _VertData;
 uint _MaxNum;
 
 // input: Main
@@ -187,9 +192,12 @@ void Main(uint3 id : SV_DispatchThreadID) {
     // 六边形颜色绘制
     DrawHexData drawHex = _DrawHexData[0];
     if (drawHex.id == i) {
-        data.col = drawHex.col;
-        _AllInstancesData[i] = data;
+        // 绘制顶点色
+        VertData vertData = _VertData[i];
+        vertData.col = drawHex.col;
+        _VertData[i] = vertData;
 
+        // 然后重置画笔数据
         drawHex.id = _MaxNum;
         _DrawHexData[0] = drawHex;
     }
