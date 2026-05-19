@@ -45,7 +45,7 @@ uint _MaxNum;
 
 // input: Main
 RWStructuredBuffer<VertData> _VertData; // 顶点数据, 也是六边形数据
-RWStructuredBuffer<DrawHexData> _DrawHexData; // 长度只有1, 设置射线颜色, col.a为是否绘制射线颜色
+RWStructuredBuffer<DrawHexData> _DrawHexData; // 长度为{MAX_DRAW_HEX_COUNT}, 设置射线颜色, col.a为是否绘制射线颜色
 float4 _FrustumPlanes[6];
 float _MaxDistance;
 float3 _CamPos;
