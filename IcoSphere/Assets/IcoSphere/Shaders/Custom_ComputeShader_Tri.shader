@@ -117,6 +117,8 @@ Shader "Custom/ComputeShader/Tri" {
                 float _TerrainDirectRepeat;
                 float _TerrainHeightShadeStrength;
                 float _TerrainMaskShadeStrength;
+                float _TerrainGeometryHeightScale;
+                float _TerrainGeometryHeightCenter;
                 float _TerrainGeometryShadeStrength;
                 float4 _TerrainGlobalRepeat;
                 float _SphericalRvtPageSizeY;
@@ -134,6 +136,17 @@ Shader "Custom/ComputeShader/Tri" {
                 }
 
                 return p + normalize(p) * height;
+            }
+
+            float SampleAreaGeometryHeight(uint vid) {
+                if (_UseTerrainGeometry < 0.5 || _TerrainTextureCount <= 0) {
+                    return 0.0;
+                }
+
+                AreaTerrainData area = _AreaTerrainData[vid];
+                uint terrainId = min((uint)round(area.info.x), (uint)(_TerrainTextureCount - 1));
+                float height01 = _TerrainHeightArray.SampleLevel(sampler_TerrainHeightArray, float3(area.info.zw, (float)terrainId), 0.0).r;
+                return (height01 - _TerrainGeometryHeightCenter) * _TerrainGeometryHeightScale;
             }
 
             Varyings vert(Attributes i, uint id : SV_InstanceID) {
@@ -156,9 +169,9 @@ Shader "Custom/ComputeShader/Tri" {
                 float h1 = 0.0;
                 float h2 = 0.0;
                 if (_UseTerrainGeometry > 0.5) {
-                    h0 = _AreaTerrainData[v0Id].tangent.w;
-                    h1 = _AreaTerrainData[v1Id].tangent.w;
-                    h2 = _AreaTerrainData[v2Id].tangent.w;
+                    h0 = SampleAreaGeometryHeight(v0Id);
+                    h1 = SampleAreaGeometryHeight(v1Id);
+                    h2 = SampleAreaGeometryHeight(v2Id);
                 }
                 v0 = DisplaceTerrainPoint(v0, h0);
                 v1 = DisplaceTerrainPoint(v1, h1);
@@ -278,7 +291,7 @@ Shader "Custom/ComputeShader/Tri" {
                 uint terrainId = min((uint)round(area.info.x), (uint)(_TerrainTextureCount - 1));
                 float3 areaCenter = area.center.xyz;
                 if (_UseTerrainGeometry > 0.5) {
-                    areaCenter += normalize(areaCenter) * area.tangent.w;
+                    areaCenter += normalize(areaCenter) * SampleAreaGeometryHeight(vid);
                 }
                 float3 localPos = posWS - areaCenter;
                 float2 localUv = float2(

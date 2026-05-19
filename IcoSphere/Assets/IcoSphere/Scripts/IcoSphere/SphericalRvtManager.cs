@@ -89,6 +89,7 @@ namespace IcoSphere {
         [Header("Terrain Geometry")]
         [SerializeField] private bool enableTerrainGeometryHeight = true;
         [SerializeField, Range(0.0f, 0.08f)] private float terrainGeometryHeightScale = 0.035f;
+        [SerializeField, Range(0.0f, 1.0f)] private float terrainGeometryHeightCenter = 0.5f;
         [SerializeField, Range(0.0f, 1.0f)] private float terrainGeometryShadeStrength = 0.35f;
 
         [Header("Spherical RVT")]
@@ -228,7 +229,6 @@ namespace IcoSphere {
             }
 
             areaTerrainData[areaId].info.x = (uint)terrainType;
-            areaTerrainData[areaId].tangent.w = GetTerrainGeometryHeight(terrainType);
             areaTerrainBuffer.SetData(areaTerrainData, areaId, areaId, 1);
             terrainMapDirty = true;
             return true;
@@ -243,7 +243,6 @@ namespace IcoSphere {
                 int areaId = areaIds[i];
                 if (areaId >= 0 && areaId < areaTerrainData.Length) {
                     areaTerrainData[areaId].info.x = (uint)terrainType;
-                    areaTerrainData[areaId].tangent.w = GetTerrainGeometryHeight(terrainType);
                 }
             }
 
@@ -271,7 +270,7 @@ namespace IcoSphere {
                     info = new Vector4((uint)terrainType, uvScale, offset.x, offset.y),
                     tint = Vector4.one,
                     center = new Vector4(center.x, center.y, center.z, areaRadius),
-                    tangent = new Vector4(tangent.x, tangent.y, tangent.z, GetTerrainGeometryHeight(terrainType)),
+                    tangent = new Vector4(tangent.x, tangent.y, tangent.z, 0.0f),
                     bitangent = new Vector4(bitangent.x, bitangent.y, bitangent.z, 0.0f)
                 };
             }
@@ -316,22 +315,6 @@ namespace IcoSphere {
                 return TerrainType.Dirt;
             }
             return TerrainType.Plains;
-        }
-
-        private float GetTerrainGeometryHeight(TerrainType terrainType) {
-            float normalizedHeight = terrainType switch {
-                TerrainType.Water => -0.28f,
-                TerrainType.River => -0.18f,
-                TerrainType.Sand => -0.03f,
-                TerrainType.Plains => 0.02f,
-                TerrainType.Marsh => -0.02f,
-                TerrainType.Hill => 0.36f,
-                TerrainType.Mountain => 0.78f,
-                TerrainType.Dirt => 0.04f,
-                _ => 0.0f
-            };
-
-            return normalizedHeight * terrainGeometryHeightScale * target.SphereRadius;
         }
 
         private float EstimateAreaRadius(int areaId, Vector3 center) {
@@ -617,6 +600,8 @@ namespace IcoSphere {
             targetMaterial.SetFloat("_TerrainHeightShadeStrength", terrainHeightShadeStrength);
             targetMaterial.SetFloat("_TerrainMaskShadeStrength", terrainMaskShadeStrength);
             targetMaterial.SetFloat("_UseTerrainGeometry", enableTerrainGeometryHeight && areaTerrainBuffer != null ? 1.0f : 0.0f);
+            targetMaterial.SetFloat("_TerrainGeometryHeightScale", terrainGeometryHeightScale * target.SphereRadius);
+            targetMaterial.SetFloat("_TerrainGeometryHeightCenter", terrainGeometryHeightCenter);
             targetMaterial.SetFloat("_TerrainGeometryShadeStrength", terrainGeometryShadeStrength);
             targetMaterial.SetFloat("_TerrainDirectRepeat", 1.0f);
             targetMaterial.SetVector("_TerrainGlobalRepeat", new Vector4(terrainRepeat.x, terrainRepeat.y, 0.0f, 0.0f));
