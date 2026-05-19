@@ -34,6 +34,7 @@ namespace IcoSphere {
         private void Awake() {
             InitDict();
             SetRayHexColor();
+            RegisterCallback();
         }
 
         private void InitDict() {
@@ -63,6 +64,11 @@ namespace IcoSphere {
                 }
                 preCountryName = nowCountryName;
             }
+        }
+
+        private void RegisterCallback() {
+            icoSphere.OnInitOver += LoadCountrySettings;
+            icoSphere.OnInitOver += LoadVertBufData;
         }
 
         public CountrySetting GetCountrySetting(string name, bool onlyFindDict = false) {

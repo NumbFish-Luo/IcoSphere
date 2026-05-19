@@ -5,6 +5,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using Unity.Collections;
 using UnityEngine;
+using UnityEngine.Events;
 
 namespace IcoSphere {
     public class IcoSphere : MonoBehaviour {
@@ -32,6 +33,9 @@ namespace IcoSphere {
         private InstanceData[] instanceData;
         private VertData[] vertData;
 
+        // 初始化完成回调
+        public UnityAction OnInitOver;
+
         public float SphereRadius => sphereRadius;
 
         // 对于单个三角形, 需要知道的信息有3个顶点坐标值, 还有毗邻的3个三角形中心坐标值
@@ -53,10 +57,11 @@ namespace IcoSphere {
             public Vector4 c20;
         }
 
+        // 顶点数据就是六边形数据, 因为每个六边形的中心点就是顶点
         [StructLayout(LayoutKind.Sequential)]
         public struct VertData {
             public Vector4 col; // rgb: 颜色, a: 国家id
-            public Vector4 replace; // rgb: 替换色, a: 插值t
+            public Vector4 replace; // rgb: 替换色, a: 与col的插值t
         }
 
         public readonly static Vector4 DEFAULT_COL = new(0.5f, 0.5f, 0.5f, 0.0f);
@@ -170,6 +175,9 @@ namespace IcoSphere {
             pack = Pack.Read(recursion);
             FreeBufs();
             NewBufs(pack);
+
+            // 完成初始化后执行注册的回调
+            OnInitOver?.Invoke();
         }
 
         public bool CheckSupportsComputeShaders() {
