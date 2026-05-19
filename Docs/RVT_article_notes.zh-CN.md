@@ -38,7 +38,7 @@
 - `SphericalRvtManager` 维护 lonlat 虚拟页、有限物理 tile cache、dirty/ready 状态和 LRU 回收。
 - `SphericalRvtIndex.compute` 写 page table/index texture。
 - `SphericalRvtBake.compute` 只 bake dirty pages，目前输出 albedo cache。
-- `Custom_ComputeShader_Tri.shader` 命中有效 page 时采 RVT cache，未命中时才回退到 per-area terrain sampling。
+- `Custom_ComputeShader_Tri.shader` 命中有效 page 且 cached terrain id 与当前 `vid` 一致时采 RVT cache；未命中或不一致时回退到 per-area terrain sampling，优先保证六边形/五边形边界正确。
 
 这版的目标是先验证文章的核心缓存管线：
 

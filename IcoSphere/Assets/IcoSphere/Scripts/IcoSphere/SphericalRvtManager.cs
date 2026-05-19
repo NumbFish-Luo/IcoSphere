@@ -130,6 +130,7 @@ namespace IcoSphere {
         private float[] terrainIdMapData;
         private RenderTexture indexTexture;
         private RenderTexture rvtAlbedoArray;
+        private int[] terrainAreaIdMapData;
         private SphericalRvtPage[] pageTable;
         private int[] physicalSlicePageIds;
         private readonly Queue<int> freePhysicalSlices = new();
@@ -427,69 +428,117 @@ namespace IcoSphere {
             int w = Mathf.Max(1, terrainIdMapWidth);
             int h = Mathf.Max(1, terrainIdMapHeight);
             int len = w * h;
+
+            if (terrainAreaIdMapData == null || terrainAreaIdMapData.Length != len) {
+                terrainAreaIdMapData = BuildTerrainAreaIdMap(w, h);
+            }
+
             terrainIdMapData = new float[len];
             for (int i = 0; i < len; ++i) {
-                terrainIdMapData[i] = -1.0f;
+                int areaId = terrainAreaIdMapData != null && i < terrainAreaIdMapData.Length ? terrainAreaIdMapData[i] : -1;
+                terrainIdMapData[i] = areaId >= 0 && areaId < areaTerrainData.Length
+                    ? areaTerrainData[areaId].info.x
+                    : (float)DEFAULT_TERRAIN;
             }
 
-            int[] queue = new int[len];
-            int tail = 0;
-            for (int i = 0; i < areaCenters.Length; ++i) {
-                Vector2 uv = WrapLonLatUv(Misc.ToLonLatUv(areaCenters[i]));
-                int x = Mathf.Clamp((int)(uv.x * w), 0, w - 1);
-                int y = Mathf.Clamp((int)(uv.y * h), 0, h - 1);
-                int idx = y * w + x;
-                if (terrainIdMapData[idx] < 0.0f) {
-                    queue[tail++] = idx;
-                }
-                terrainIdMapData[idx] = areaTerrainData[i].info.x;
-            }
-
-            FloodFillTerrainIdMap(w, h, queue, tail);
             UploadTerrainIdMap(w, h);
         }
 
-        private void FloodFillTerrainIdMap(int w, int h, int[] queue, int tail) {
-            if (tail <= 0) {
-                FillTerrainIdMap((float)DEFAULT_TERRAIN);
-                return;
+        private int[] BuildTerrainAreaIdMap(int w, int h) {
+            int len = w * h;
+            int[] areaIdMap = new int[len];
+            if (areaCenters == null || areaCenters.Length == 0) {
+                Array.Fill(areaIdMap, -1);
+                return areaIdMap;
             }
 
-            int head = 0;
-            while (head < tail) {
-                int idx = queue[head++];
-                float terrainId = terrainIdMapData[idx];
-                int x = idx % w;
-                int y = idx / w;
+            int binCols = Mathf.Clamp(w / 2, 32, 1024);
+            int binRows = Mathf.Clamp(h / 2, 16, 512);
+            BuildAreaCenterBins(binCols, binRows, out int[] binHeads, out int[] binNext);
 
-                for (int dy = -1; dy <= 1; ++dy) {
-                    int yy = y + dy;
-                    if (yy < 0 || yy >= h) {
-                        continue;
-                    }
+            for (int y = 0; y < h; ++y) {
+                float v = (y + 0.5f) / h;
+                float lat = (v - 0.5f) * Mathf.PI;
+                float cosLat = Mathf.Abs(Mathf.Cos(lat));
+                int radiusX = cosLat < 0.05f
+                    ? binCols / 2
+                    : Mathf.Clamp(Mathf.CeilToInt(2.0f / Mathf.Max(cosLat, 0.12f)), 2, 32);
+                int radiusY = cosLat < 0.05f ? 3 : 2;
 
-                    for (int dx = -1; dx <= 1; ++dx) {
-                        if (dx == 0 && dy == 0) {
-                            continue;
-                        }
-
-                        int xx = Mod(x + dx, w);
-                        int neighborIdx = yy * w + xx;
-                        if (terrainIdMapData[neighborIdx] >= 0.0f) {
-                            continue;
-                        }
-
-                        terrainIdMapData[neighborIdx] = terrainId;
-                        queue[tail++] = neighborIdx;
-                    }
+                for (int x = 0; x < w; ++x) {
+                    float u = (x + 0.5f) / w;
+                    Vector3 direction = LonLatUvToDirection(u, v);
+                    areaIdMap[y * w + x] = FindNearestAreaIdInBins(
+                        direction,
+                        u,
+                        v,
+                        binCols,
+                        binRows,
+                        binHeads,
+                        binNext,
+                        radiusX,
+                        radiusY
+                    );
                 }
+            }
+
+            return areaIdMap;
+        }
+
+        private void BuildAreaCenterBins(int binCols, int binRows, out int[] binHeads, out int[] binNext) {
+            int binCount = binCols * binRows;
+            binHeads = new int[binCount];
+            binNext = new int[areaCenters.Length];
+            Array.Fill(binHeads, -1);
+            Array.Fill(binNext, -1);
+
+            for (int i = 0; i < areaCenters.Length; ++i) {
+                Vector2 uv = WrapLonLatUv(Misc.ToLonLatUv(areaCenters[i]));
+                int bx = Mathf.Clamp((int)(uv.x * binCols), 0, binCols - 1);
+                int by = Mathf.Clamp((int)(uv.y * binRows), 0, binRows - 1);
+                int bin = by * binCols + bx;
+                binNext[i] = binHeads[bin];
+                binHeads[bin] = i;
             }
         }
 
-        private void FillTerrainIdMap(float terrainId) {
-            for (int i = 0; i < terrainIdMapData.Length; ++i) {
-                terrainIdMapData[i] = terrainId;
+        private int FindNearestAreaIdInBins(
+            Vector3 direction,
+            float u,
+            float v,
+            int binCols,
+            int binRows,
+            int[] binHeads,
+            int[] binNext,
+            int radiusX,
+            int radiusY) {
+            int centerX = Mathf.Clamp((int)(u * binCols), 0, binCols - 1);
+            int centerY = Mathf.Clamp((int)(v * binRows), 0, binRows - 1);
+            int bestAreaId = -1;
+            float bestDot = -2.0f;
+
+            int minY = Mathf.Max(0, centerY - radiusY);
+            int maxY = Mathf.Min(binRows - 1, centerY + radiusY);
+            bool scanAllX = radiusX >= binCols / 2;
+            int minDx = scanAllX ? 0 : -radiusX;
+            int maxDx = scanAllX ? binCols - 1 : radiusX;
+
+            for (int by = minY; by <= maxY; ++by) {
+                for (int dx = minDx; dx <= maxDx; ++dx) {
+                    int bx = scanAllX ? dx : Mod(centerX + dx, binCols);
+                    int areaId = binHeads[by * binCols + bx];
+                    while (areaId >= 0) {
+                        float d = Vector3.Dot(direction, areaCenters[areaId]);
+                        if (d > bestDot) {
+                            bestDot = d;
+                            bestAreaId = areaId;
+                        }
+                        areaId = binNext[areaId];
+                    }
+                }
             }
+
+            return bestAreaId;
         }
 
         private void UploadTerrainIdMap(int w, int h) {
@@ -914,6 +963,7 @@ namespace IcoSphere {
                 DestroyUnityObject(terrainIdMap);
                 terrainIdMap = null;
             }
+            terrainAreaIdMapData = null;
             if (indexTexture != null) {
                 indexTexture.Release();
                 DestroyUnityObject(indexTexture);
@@ -969,6 +1019,13 @@ namespace IcoSphere {
 
         private static Vector2 WrapLonLatUv(Vector2 uv) {
             return new Vector2(Mathf.Repeat(uv.x, 1.0f), Mathf.Clamp01(uv.y));
+        }
+
+        private static Vector3 LonLatUvToDirection(float u, float v) {
+            float lon = (u * 2.0f - 1.0f) * Mathf.PI;
+            float lat = (v - 0.5f) * Mathf.PI;
+            float cosLat = Mathf.Cos(lat);
+            return new Vector3(Mathf.Cos(lon) * cosLat, Mathf.Sin(lat), Mathf.Sin(lon) * cosLat);
         }
 
         private static int Mod(int value, int modulus) {

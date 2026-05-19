@@ -48,5 +48,6 @@ void Bake(uint3 id : SV_DispatchThreadID) {
     float heightShade = lerp(1.0 - _TerrainHeightShadeStrength, 1.0 + _TerrainHeightShadeStrength, saturate(height));
     float maskShade = lerp(1.0, lerp(0.88, 1.06, saturate(mask)), saturate(_TerrainMaskShadeStrength));
     albedo.rgb *= heightShade * maskShade;
+    albedo.a = ((float)terrainId + 0.5) / 255.0;
     _RvtAlbedoArray[int3(id.xy, _PhysicalSlice)] = albedo;
 }

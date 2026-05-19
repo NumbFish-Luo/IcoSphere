@@ -56,7 +56,7 @@ The `feature-zhihu-style-spherical-rvt` branch implements a first spherical adap
 - `SphericalRvtManager` maintains lonlat virtual pages and a smaller physical tile cache.
 - `SphericalRvtIndex.compute` fills an index texture/page table for active pages.
 - `SphericalRvtBake.compute` bakes dirty albedo tiles from terrain layer arrays.
-- `Custom_ComputeShader_Tri.shader` samples the RVT cache on valid pages and falls back to direct per-area terrain sampling when a page is missing.
+- `Custom_ComputeShader_Tri.shader` samples the RVT cache on valid pages and falls back to direct per-area terrain sampling when a page is missing or the cached terrain id does not match the current `vid`.
 
 This is intentionally not the article's planar XZ quadtree. The first spherical page space is lonlat so the page-table/cache/final-sampling pipeline can be validated before moving to an icosahedron-face atlas or area-cluster hierarchy.
 

@@ -268,9 +268,14 @@ Shader "Custom/ComputeShader/Tri" {
                 return terrainCol * area.tint;
             }
 
-            bool TrySampleSphericalRvt(float3 posWS, out float4 rvtCol) {
+            uint GetAreaTerrainId(uint vid) {
+                AreaTerrainData area = _AreaTerrainData[vid];
+                return min((uint)round(area.info.x), (uint)(_TerrainTextureCount - 1));
+            }
+
+            bool TrySampleSphericalRvt(uint vid, float3 posWS, out float4 rvtCol) {
                 rvtCol = 0.0;
-                if (_UseSphericalRvt < 0.5) {
+                if (_UseSphericalRvt < 0.5 || _TerrainTextureCount <= 0) {
                     return false;
                 }
 
@@ -285,6 +290,13 @@ Shader "Custom/ComputeShader/Tri" {
                 float2 pageSize = max(float2(indexData.w, _SphericalRvtPageSizeY), 1e-6);
                 float2 localUv = frac((sphereUv - pageMin) / pageSize);
                 rvtCol = SAMPLE_TEXTURE2D_ARRAY(_SphericalRvtAlbedoArray, sampler_SphericalRvtAlbedoArray, localUv, slice);
+                uint expectedTerrainId = GetAreaTerrainId(vid);
+                uint bakedTerrainId = (uint)floor(saturate(rvtCol.a) * 255.0);
+                if (bakedTerrainId != expectedTerrainId) {
+                    return false;
+                }
+
+                rvtCol.a = 1.0;
                 return true;
             }
 
@@ -320,7 +332,7 @@ Shader "Custom/ComputeShader/Tri" {
                 }
                 col.rgb = _AllInstancesData[vid].col.rgb;
                 float4 rvtCol = 0.0;
-                if (TrySampleSphericalRvt(p, rvtCol)) {
+                if (TrySampleSphericalRvt(vid, p, rvtCol)) {
                     col = rvtCol;
                 } else {
                     col = SampleAreaTerrain(vid, p, col);

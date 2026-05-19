@@ -30,9 +30,9 @@ Expensive terrain material blending is baked into cache tiles. The final shader 
 - Page selection: pages near the camera direction.
 - Update policy: only dirty pages are baked, with a per-frame update limit.
 - Page table: an index texture stores physical slice and page rect data.
-- Fallback: invalid or non-resident pages fall back to direct per-area terrain sampling.
+- Fallback: invalid/non-resident pages, or cached tiles whose baked terrain id does not match the current fragment's real `vid`, fall back to direct per-area terrain sampling.
 
-When RVT hits, the final shader samples `_SphericalRvtAlbedoArray` directly. It does not first sample albedo/height/mask and then overwrite the result.
+When RVT hits and the terrain id matches the current hex/pent area, the final shader samples `_SphericalRvtAlbedoArray` directly. Mismatches prefer correct cell shape over using a stale or approximate cache sample.
 
 ## Terrain Texture Channel Contract
 
@@ -64,7 +64,7 @@ This is not the final ideal spherical page space. Better future options are:
 
 ## Current Limits
 
-- The terrain id map is approximate: area centers are projected to lonlat and flood-filled, not exact cell-boundary rasterization.
+- The terrain id map is a nearest-area-center spherical Voronoi approximation, not exact rasterization from the same triangle fan tests used by the fragment shader.
 - Only albedo cache tiles are generated.
 - Normal/height/mask cache outputs are not implemented yet.
 - The article's multi-mip cache and derivative correction are not implemented yet.

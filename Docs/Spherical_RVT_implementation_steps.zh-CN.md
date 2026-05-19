@@ -23,10 +23,12 @@
    - `lastUsedFrame`
 5. RVT 物理缓存不再等于全局页面总数。当前实现使用有限 `physicalTileCount`，相机附近页面按需分配物理 slice；旧页面按 LRU 方式回收。
 6. index texture/page table 中 inactive page 写入 `slice = -1`。final shader 看到无效 page 时回退到直接 per-area terrain 采样。
-7. bake pass 只处理 dirty pages，每帧由 `pagesToBakePerFrame` 限制更新数量。
-8. final shader 命中 RVT page 时直接采样 `_SphericalRvtAlbedoArray`，不再先做 per-area 复杂材质采样再覆盖；只有 RVT 未命中时才走 fallback。
-9. 主渲染 shader 不做 vertex 阶段地形几何高度，也不在 vertex 阶段采样地形贴图，避免重新触发 Unity shader compiler IPC 崩溃路径。
-10. 鼠标高亮、area `vid` 判断、网格线 overlay 保持原路径。
+7. bake pass 在 albedo alpha 中编码 baked terrain id；final shader 会用真实 `vid -> AreaTerrainData.terrainId` 校验，避免 lonlat page cache 跨六边形/五边形地块污染。
+8. `terrainIdMap` 不再由 2D flood fill 生成，改为先构建 lonlat texel 到最近球面 area center 的 `areaIdMap`，再从 area id 派生 terrain id。
+9. bake pass 只处理 dirty pages，每帧由 `pagesToBakePerFrame` 限制更新数量。
+10. final shader 命中 RVT page 且 terrain id 校验通过时采样 `_SphericalRvtAlbedoArray`；page 未命中或 terrain id 不一致时回退到按六边形的 per-area terrain sampling。
+11. 主渲染 shader 不做 vertex 阶段地形几何高度，也不在 vertex 阶段采样地形贴图，避免重新触发 Unity shader compiler IPC 崩溃路径。
+12. 鼠标高亮、area `vid` 判断、网格线 overlay 保持原路径。
 
 ## 当前数据流
 
@@ -37,10 +39,11 @@ camera direction
   -> allocate/reuse physical slices
   -> mark dirty pages
   -> SphericalRvtBake.compute writes albedo cache tile
+  -> cache alpha stores baked terrain id
   -> SphericalRvtIndex.compute writes page table/index texture
   -> final shader samples page table
-  -> valid slice: sample RVT albedo cache
-  -> invalid slice: fallback to vid -> AreaTerrainData -> terrain texture arrays
+  -> valid slice and terrain id matches current vid: sample RVT albedo cache
+  -> invalid/mismatched slice: fallback to vid -> AreaTerrainData -> terrain texture arrays
 ```
 
 ## 球面适配说明
@@ -62,7 +65,7 @@ sphere normal/world position -> longitude/latitude -> uv(0..1)
 1. 还没有按文章完整实现 quadtree split/merge 层级；当前是固定 lonlat grid + 相机附近工作集。
 2. 还没有 normal/height/mask 多 render target cache；当前只输出 albedo cache。
 3. 还没有 mip 链和 derivative 修正；斜角采样可能仍需要后续处理。
-4. terrain id map 由 area center 投影后 flood fill 得到，是第一版近似，不是精确地块边界光栅化。
+4. terrain id map 已改为最近 area center 的球面 Voronoi 近似，但仍不是和 fragment shader 完全同源的三角形扇区光栅化。
 5. 未接入道路、贴花、编辑器刷地形等更完整的地形生产流程。
 
 ## 验证记录

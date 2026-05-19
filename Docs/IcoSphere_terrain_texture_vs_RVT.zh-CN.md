@@ -32,9 +32,9 @@ world position / terrain uv
 - 页面选择：按相机方向选择附近 pages。
 - 更新策略：dirty page 才 bake，每帧限制 bake 数量。
 - page table：index texture 写入 physical slice 和 page rect。
-- fallback：page 未 ready 或未驻留时，才走直接 per-area terrain sampling。
+- fallback：page 未 ready、未驻留，或 baked terrain id 与当前像素真实 `vid` 不一致时，才走直接 per-area terrain sampling。
 
-这样 final shader 在 RVT 命中时不会重复采样 albedo/height/mask 组合，只采 `_SphericalRvtAlbedoArray`。
+这样 final shader 在 RVT 命中且与当前六边形/五边形地块一致时，不会重复采样 albedo/height/mask 组合，只采 `_SphericalRvtAlbedoArray`；不一致时优先保证地块形状正确。
 
 ## 贴图通道约定
 
@@ -60,7 +60,7 @@ world position / terrain uv
 
 ## 当前限制
 
-- terrain id map 不是精确地块边界 rasterize，而是 area center 投影后 flood fill 的近似。
+- terrain id map 是最近 area center 的球面 Voronoi 近似，不是和 fragment shader 完全同源的精确扇区 rasterize。
 - albedo cache 已实现，normal/height/mask cache 未实现。
 - 没有按文章做多 mip cache 和导数修正。
 - lonlat seam 和极区拉伸只是第一版可接受问题，不是最终方案。
