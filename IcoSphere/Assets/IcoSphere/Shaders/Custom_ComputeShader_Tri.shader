@@ -56,8 +56,11 @@ Shader "Custom/ComputeShader/Tri" {
             };
 
             struct AreaTerrainData {
-                float4 info; // x: terrain id, y: uv repeat, z/w: uv offset
+                float4 info; // x: terrain id, y: local uv scale, z/w: local uv center offset
                 float4 tint;
+                float4 center;
+                float4 tangent;
+                float4 bitangent;
             };
 
             StructuredBuffer<InstanceData> _AllInstancesData;
@@ -240,9 +243,13 @@ Shader "Custom/ComputeShader/Tri" {
 
                 AreaTerrainData area = _AreaTerrainData[vid];
                 uint terrainId = min((uint)round(area.info.x), (uint)(_TerrainTextureCount - 1));
-                float2 sphereUv = ToLonLatUv(posWS);
+                float3 localPos = posWS - area.center.xyz;
+                float2 localUv = float2(
+                    dot(localPos, area.tangent.xyz),
+                    dot(localPos, area.bitangent.xyz)
+                );
                 float repeat = max(area.info.y * max(_TerrainDirectRepeat, 0.0001), 0.0001);
-                float2 sourceUv = frac(sphereUv * repeat + area.info.zw);
+                float2 sourceUv = localUv * repeat + area.info.zw;
                 float4 terrainCol = SAMPLE_TEXTURE2D_ARRAY(_TerrainAlbedoArray, sampler_TerrainAlbedoArray, sourceUv, terrainId);
                 return terrainCol * area.tint;
             }

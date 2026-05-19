@@ -12,9 +12,12 @@ namespace IcoSphere {
     public class SphericalRvtManager : MonoBehaviour {
         [StructLayout(LayoutKind.Sequential)]
         public struct AreaTerrainData {
-            // x: terrain id, y: uv repeat, z/w: uv offset
+            // info.x: terrain id, info.y: local uv scale, info.zw: local uv center offset
             public Vector4 info;
             public Vector4 tint;
+            public Vector4 center;
+            public Vector4 tangent;
+            public Vector4 bitangent;
         }
 
         private struct RvtPage {
@@ -54,11 +57,13 @@ namespace IcoSphere {
         [Header("Source Terrain Textures")]
         [SerializeField] private Texture2D[] terrainAlbedoTextures = new Texture2D[TERRAIN_COUNT];
         [SerializeField, Range(128, 2048)] private int terrainTextureSize = 1024;
-        [SerializeField] private Vector2 terrainRepeat = new(72.0f, 36.0f);
+        [SerializeField] private Vector2 terrainRepeat = new(18.0f, 9.0f);
+        [SerializeField] private Vector2 perAreaTextureRepeatRange = new(0.75f, 1.15f);
 
         [Header("Spherical RVT")]
         [SerializeField] private ComputeShader indexCompute;
         [SerializeField] private ComputeShader bakeCompute;
+        [SerializeField] private bool enableSphericalRvtSampling = false;
         [SerializeField, Range(64, 512)] private int tileSize = 256;
         [SerializeField, Range(2, 64)] private int pageColumns = 16;
         [SerializeField, Range(1, 32)] private int pageRows = 8;
@@ -215,16 +220,24 @@ namespace IcoSphere {
             int n = areaCenters.Length;
             areaTerrainData = new AreaTerrainData[n];
             for (int i = 0; i < n; ++i) {
+                Vector3 normal = areaCenters[i].normalized;
+                Vector3 center = areaCenters[i] * target.SphereRadius;
+                BuildSurfaceBasis(normal, i, out Vector3 tangent, out Vector3 bitangent);
+
                 TerrainType terrainType = PickDefaultTerrain(areaCenters[i], i);
-                float repeat = Mathf.Lerp(18.0f, 46.0f, Misc.IntToRandom((uint)i, 313) / 255.0f);
-                Vector2 offset = new(
-                    Misc.IntToRandom((uint)i, 97) / 255.0f,
-                    Misc.IntToRandom((uint)i, 173) / 255.0f
-                );
+                float repeatMin = Mathf.Max(0.05f, Mathf.Min(perAreaTextureRepeatRange.x, perAreaTextureRepeatRange.y));
+                float repeatMax = Mathf.Max(repeatMin, Mathf.Max(perAreaTextureRepeatRange.x, perAreaTextureRepeatRange.y));
+                float repeat = Mathf.Lerp(repeatMin, repeatMax, Misc.IntToRandom((uint)i, 313) / 255.0f);
+                float areaRadius = EstimateAreaRadius(i, center);
+                float uvScale = repeat / Mathf.Max(areaRadius * 2.0f, 0.0001f);
+                Vector2 offset = new(0.5f, 0.5f);
 
                 areaTerrainData[i] = new AreaTerrainData {
-                    info = new Vector4((uint)terrainType, repeat, offset.x, offset.y),
-                    tint = Vector4.one
+                    info = new Vector4((uint)terrainType, uvScale, offset.x, offset.y),
+                    tint = Vector4.one,
+                    center = new Vector4(center.x, center.y, center.z, areaRadius),
+                    tangent = new Vector4(tangent.x, tangent.y, tangent.z, 0.0f),
+                    bitangent = new Vector4(bitangent.x, bitangent.y, bitangent.z, 0.0f)
                 };
             }
 
@@ -239,35 +252,76 @@ namespace IcoSphere {
 
         private TerrainType PickDefaultTerrain(Vector3 rawAreaCenter, int areaId) {
             float latAbs = Mathf.Abs(Mathf.Asin(Mathf.Clamp(rawAreaCenter.normalized.y, -1.0f, 1.0f)) / (Mathf.PI * 0.5f));
-            uint moisture = Misc.IntToRandom((uint)areaId, 17);
-            uint elevation = Misc.IntToRandom((uint)areaId, 211);
+            float moisture = Misc.IntToRandom((uint)areaId, 17) / 255.0f;
+            float elevation = Misc.IntToRandom((uint)areaId, 211) / 255.0f;
             uint river = Misc.IntToRandom((uint)areaId, 541);
 
-            if (river < 8) {
+            if (river < 3 && moisture > 0.58f && latAbs < 0.78f) {
                 return TerrainType.River;
             }
-            if (latAbs > 0.86f) {
+            if (latAbs > 0.90f && elevation > 0.62f) {
                 return TerrainType.Mountain;
             }
-            if (moisture < 34) {
+            if (latAbs < 0.38f && moisture < 0.09f) {
                 return TerrainType.Sand;
             }
-            if (moisture > 222) {
-                return TerrainType.Marsh;
-            }
-            if (elevation > 226) {
-                return TerrainType.Mountain;
-            }
-            if (elevation > 174) {
-                return TerrainType.Hill;
-            }
-            if (moisture < 78) {
-                return TerrainType.Dirt;
-            }
-            if (moisture > 202 && elevation < 72) {
+            if (moisture > 0.96f && elevation < 0.34f) {
                 return TerrainType.Water;
             }
+            if (moisture > 0.92f && elevation < 0.45f) {
+                return TerrainType.Marsh;
+            }
+            if (elevation > 0.96f) {
+                return TerrainType.Mountain;
+            }
+            if (elevation > 0.88f) {
+                return TerrainType.Hill;
+            }
+            if (moisture < 0.055f) {
+                return TerrainType.Dirt;
+            }
             return TerrainType.Plains;
+        }
+
+        private float EstimateAreaRadius(int areaId, Vector3 center) {
+            float sum = 0.0f;
+            int count = 0;
+            for (int i = 0; i < 6; ++i) {
+                int neighborId = target.GetNeighborId(areaId, i);
+                if (neighborId < 0 || neighborId >= areaCenters.Length || neighborId == areaId) {
+                    continue;
+                }
+
+                float distance = Vector3.Distance(center, target.GetAreaCenter(neighborId));
+                if (distance > 0.00001f) {
+                    sum += distance;
+                    ++count;
+                }
+            }
+
+            float neighborDistance = count > 0 ? sum / count : target.SphereRadius * 0.1f;
+            return Mathf.Max(neighborDistance * 0.58f, target.SphereRadius * 0.0001f);
+        }
+
+        private static void BuildSurfaceBasis(Vector3 normal, int areaId, out Vector3 tangent, out Vector3 bitangent) {
+            if (normal.sqrMagnitude < 0.000001f) {
+                normal = Vector3.up;
+            } else {
+                normal.Normalize();
+            }
+
+            Vector3 reference = Mathf.Abs(Vector3.Dot(normal, Vector3.up)) > 0.92f ? Vector3.forward : Vector3.up;
+            tangent = Vector3.Cross(reference, normal);
+            if (tangent.sqrMagnitude < 0.000001f) {
+                tangent = Vector3.Cross(Vector3.right, normal);
+            }
+            tangent.Normalize();
+            bitangent = Vector3.Cross(normal, tangent).normalized;
+
+            float angle = Misc.IntToRandom((uint)areaId, 719) / 255.0f * 360.0f;
+            Quaternion rotation = Quaternion.AngleAxis(angle, normal);
+            tangent = rotation * tangent;
+            bitangent = rotation * bitangent;
         }
 
         private void CreateTerrainAlbedoArray() {
@@ -497,7 +551,7 @@ namespace IcoSphere {
             }
 
             targetMaterial.SetFloat("_UseTerrainTextures", terrainAlbedoArray != null && areaTerrainBuffer != null ? 1.0f : 0.0f);
-            targetMaterial.SetFloat("_UseSphericalRvt", rvtReady && CanUseRvtCompute() ? 1.0f : 0.0f);
+            targetMaterial.SetFloat("_UseSphericalRvt", enableSphericalRvtSampling && rvtReady && CanUseRvtCompute() ? 1.0f : 0.0f);
         }
 
         private bool CanUseRvtCompute() {
