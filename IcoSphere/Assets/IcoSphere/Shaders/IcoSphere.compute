@@ -27,6 +27,12 @@ struct RayData {
 
 struct DrawHexData {
     uint id; // 顶点id
+
+    // 绘制模式
+    // 0: 修改国家数据, col.rgb: 颜色,   col.a: 国家id
+    // 1: 修改颜色高亮, col.rgb: 替换色, col.a: 插值t
+    uint mode;
+
     float4 col;
 };
 
@@ -194,7 +200,11 @@ void Main(uint3 id : SV_DispatchThreadID) {
     if (drawHex.id == i) {
         // 绘制顶点色
         VertData vertData = _VertData[i];
-        vertData.col = drawHex.col;
+        if (drawHex.mode == 0) {
+            vertData.col = drawHex.col;
+        } else {
+            vertData.replace = drawHex.col;
+        }
         _VertData[i] = vertData;
 
         // 然后重置画笔数据

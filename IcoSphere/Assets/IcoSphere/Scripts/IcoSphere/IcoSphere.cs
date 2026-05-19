@@ -80,7 +80,13 @@ namespace IcoSphere {
         [StructLayout(LayoutKind.Sequential)]
         public struct DrawHexData {
             public uint id; // 顶点id
+            public uint mode; // 绘制模式: DrawHexMode
             public Color col;
+        }
+
+        public enum DrawHexMode {
+            CountryMode   = 0, // 修改国家数据, col.rgb: 颜色, col.a: 国家id
+            HighlightMode = 1  // 替换颜色高亮, col.rgb: 替换色, col.a: 插值t
         }
 
         private void Awake() {
@@ -116,7 +122,7 @@ namespace IcoSphere {
             try {
                 Plane[] frustumPlanes = GeometryUtility.CalculateFrustumPlanes(cam);
                 Vector3 camPos = cam.transform.position;
-                computeShader.SetVectorArray("_FrustumPlanes", PlanesToVector4(frustumPlanes));
+                computeShader.SetVectorArray("_FrustumPlanes", PlanesToVec4(frustumPlanes));
                 computeShader.SetFloat("_MaxDistance", cam.farClipPlane);
                 computeShader.SetVector("_CamPos", camPos);
                 computeShader.SetFloat("_InstanceRadius", instanceRadius);
@@ -218,18 +224,8 @@ namespace IcoSphere {
             return m;
         }
 
-        private RayData[] NewDefaultRayData() {
-            RayData[] result = new RayData[1];
-            result[0].tid = (uint)pack.tris.Length;
-            return result;
-        }
-
-        private DrawHexData[] NewDefaultDrawHexData() {
-            DrawHexData[] result = new DrawHexData[1];
-            result[0].id = (uint)pack.tris.Length;
-            result[0].col = Color.clear;
-            return result;
-        }
+        private RayData[] NewDefaultRayData() => new RayData[1] { new() { tid = (uint)pack.tris.Length } };
+        private DrawHexData[] NewDefaultDrawHexData() => new DrawHexData[1] { new() { id = (uint)pack.tris.Length } };
 
         private void NewBufs(Pack p) {
             int n = p.tris.Length;
@@ -250,7 +246,7 @@ namespace IcoSphere {
             int m = p.verts.Length;
             vertData = new VertData[m];
             for (uint i = 0; i < m; ++i) {
-                vertData[i] = NewVertData(p, i);
+                vertData[i] = NewVertData();
             }
             int vertStride = Marshal.SizeOf(typeof(VertData));
             vertBuf = ComputeBufManager.NewBuf(m, vertStride);
@@ -322,16 +318,16 @@ namespace IcoSphere {
 
             return new() {
                 id = i,
-                v0 = new Vector4(p0.x, p0.y, p0.z, v0),
-                v1 = new Vector4(p1.x, p1.y, p1.z, v1),
-                v2 = new Vector4(p2.x, p2.y, p2.z, v2),
-                c01 = new Vector4(c01.x, c01.y, c01.z, p.adjTris[i][0]),
-                c12 = new Vector4(c12.x, c12.y, c12.z, p.adjTris[i][1]),
-                c20 = new Vector4(c20.x, c20.y, c20.z, p.adjTris[i][2])
+                v0 = new(p0.x, p0.y, p0.z, v0),
+                v1 = new(p1.x, p1.y, p1.z, v1),
+                v2 = new(p2.x, p2.y, p2.z, v2),
+                c01 = new(c01.x, c01.y, c01.z, p.adjTris[i][0]),
+                c12 = new(c12.x, c12.y, c12.z, p.adjTris[i][1]),
+                c20 = new(c20.x, c20.y, c20.z, p.adjTris[i][2])
             };
         }
 
-        private VertData NewVertData(Pack p, uint i) {
+        private VertData NewVertData() {
             return new() {
                 col = DEFAULT_COL,
                 replace = Color.clear
@@ -358,26 +354,28 @@ namespace IcoSphere {
             mat.SetColor("_RayHexCol", Color.white);
         }
 
-        private Vector4[] PlanesToVector4(Plane[] p) {
+        private Vector4[] PlanesToVec4(Plane[] p) {
             Vector4[] result = new Vector4[6];
             for (int i = 0; i < 6 && i < p.Length; i++) {
-                result[i] = new Vector4(p[i].normal.x, p[i].normal.y, p[i].normal.z, p[i].distance);
+                result[i] = new(p[i].normal.x, p[i].normal.y, p[i].normal.z, p[i].distance);
             }
             return result;
         }
 
-        public void SetRayHexColorToShader(Color col) {
+        // 设置当前射线击中的六边形的高亮颜色
+        public void SetRayHexCol(Color col) {
             mat.SetColor("_RayHexCol", col);
         }
 
-        public void DrawHexColorToComputeShader(Color col, uint id) {
+        // 设置当前射线击中的六边形国家数据
+        public void SetRayHexCountry(Color countryCol, uint countryId) {
             RayData[] outRayData = new RayData[1];
             rayBuf.GetData(outRayData);
-
-            DrawHexData[] inDrawHexData = new DrawHexData[1];
-            inDrawHexData[0].id = outRayData[0].vid;
-            inDrawHexData[0].col = new Vector4(col.r, col.g, col.b, id);
-            drawHexBuf.SetData(inDrawHexData);
+            drawHexBuf.SetData(new DrawHexData[1] { new() {
+                id = outRayData[0].vid,
+                mode = (uint)DrawHexMode.CountryMode,
+                col = new Vector4(countryCol.r, countryCol.g, countryCol.b, countryId)
+            }});
         }
 
         public bool TryGetRayHexCountryId(out uint countryId, out uint hexId, out RayData rayData) {
@@ -419,7 +417,7 @@ namespace IcoSphere {
             int n = pack.verts.Length;
             vertData = new VertData[n];
             for (uint i = 0; i < n; ++i) {
-                vertData[i] = NewVertData(pack, i);
+                vertData[i] = NewVertData();
             }
             // 映射国家颜色值
             for (uint i = 0; i < n; ++i) {
@@ -484,7 +482,7 @@ namespace IcoSphere {
 
         // 判断areaId是否有效, 用于避免点击、寻路、读档时传入非法id
         public bool IsValidAreaId(int areaId) {
-            return areaId >= 0 && areaId < pack.verts.Length;
+            return 0 <= areaId && areaId < pack.verts.Length;
         }
 
         // 返回某个地块中心点的世界坐标
@@ -560,19 +558,39 @@ namespace IcoSphere {
             return true;
         }
 
-        // 设置单个地块颜色, 用途: 选中高亮、归属变化等
-        [Obsolete] public void SetAreaColor(int areaId, Color color) {
-            // todo: ...
+        // 设置单个地块颜色
+        // 注意: 只是做选中高亮效果, 如果color的透明底为0, 则相当于清除高亮
+        public void SetAreaColor(int areaId, Color color) {
+            drawHexBuf.SetData(new DrawHexData[1] { new() {
+                id = (uint)areaId,
+                mode = (uint)DrawHexMode.HighlightMode,
+                col = color
+            }});
         }
 
-        // 批量设置多个地块为同一种颜色, 用途：初始化国家颜色、刷新地图模式等
+        // 设置单个地块的国家颜色
+        // 注意: 需要同时传入正确的国家颜色和国家id才行
+        // 可以看CountryColorDrawer.countrySettings列表或countrySettingsDict字典获取正确的国家颜色和国家id
+        public void ChangeAreaCountry(int areaId, Color countryCol, uint countryId) {
+            drawHexBuf.SetData(new DrawHexData[1] { new() {
+                id = (uint)areaId,
+                mode = (uint)DrawHexMode.CountryMode,
+                col = new(countryCol.r, countryCol.g, countryCol.b, countryId)
+            }});
+        }
+
+        // 批量设置多个地块为同一种颜色, 用途：批量范围内选中高亮效果, 如果color的透明底为0, 则相当于清除高亮
         [Obsolete] public void SetAreaColors(int[] areaIds, Color color) {
             // todo: ...
         }
 
-        // 清除单个地块的特殊颜色, 并恢复默认颜色
-        [Obsolete] public void ClearAreaColor(int areaId) {
+        [Obsolete] public void ChangeAreaCountries(int[] areaIds, uint countryId) {
             // todo: ...
+        }
+
+        // 清除单个地块的特殊颜色, 并恢复默认颜色
+        public void ClearAreaColor(int areaId) {
+            SetAreaColor(areaId, Color.clear);
         }
     }
 }

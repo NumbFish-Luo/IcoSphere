@@ -1190,7 +1190,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 0
+  m_IsActive: 1
 --- !u!4 &1981543443
 Transform:
   m_ObjectHideFlags: 0
@@ -1222,6 +1222,7 @@ MonoBehaviour:
   icoSphere: {fileID: 1571646976}
   doTest: 0
   testBall: {fileID: 1398583198}
+  highlight: {r: 1, g: 1, b: 1, a: 1}
 --- !u!1 &2046679407
 GameObject:
   m_ObjectHideFlags: 0

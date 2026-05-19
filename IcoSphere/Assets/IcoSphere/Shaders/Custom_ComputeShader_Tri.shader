@@ -203,8 +203,13 @@ Shader "Custom/ComputeShader/Tri" {
                 return 1.0 - step(EPS, abs(a - b));
             }
 
+            float TimeSin01(float scale, float tMin, float tMax) {
+                return tMin + (sin(_Time.y * scale) + 1.0) * 0.5 * (tMax - tMin);
+            }
+
             half4 frag(Varyings i) : SV_Target {
                 UNITY_SETUP_INSTANCE_ID(i);
+
                 float3 p = i.posWS;
                 float3 o = i.ctr;
                 float w = _LineWidth;
@@ -233,10 +238,12 @@ Shader "Custom/ComputeShader/Tri" {
                 } else if (In180Angle(o, i.c12.xyz - o, i.c20.xyz - o, p) > 0.0) {
                     vid = i.v2.w;
                 }
-                col.rgb = _VertData[vid].col.rgb;
+                VertData vertData = _VertData[vid];
+                float3 vdCol = vertData.col.rgb;
+                float3 vdReplace = vertData.replace.rgb;
+                float vdReplaceT = vertData.replace.a * TimeSin01(2.0, 0.1, 1.0);
+                col.rgb = lerp(vdCol, vdReplace, vdReplaceT);
                 col = lerp(col, colLine, l);
-
-                float t = (sin(_Time.y) + 1.0) * 0.5;
 
                 // 射线uv转具体坐标
                 float3 dirU = i.v1.xyz - i.v0.xyz;

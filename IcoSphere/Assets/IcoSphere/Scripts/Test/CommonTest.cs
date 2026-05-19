@@ -8,6 +8,7 @@ namespace IcoSphere {
         [SerializeField] private IcoSphere icoSphere;
         [SerializeField] private bool doTest;
         [SerializeField] private GameObject testBall;
+        [SerializeField] private Color highlight = Color.white;
 
         private void Update() {
             if (doTest) {
@@ -16,9 +17,14 @@ namespace IcoSphere {
                 TestDict();
             }
 
+            // 左键按下时的测试代码
             if (Input.GetMouseButtonDown(0)) {
-                // 在这里随机加点鼠标点击相关的测试代码
                 TestRay();
+            }
+
+            // 右键持续按下时的测试代码
+            if (Input.GetMouseButton(1)) {
+                TestHighlight();
             }
         }
 
@@ -50,6 +56,14 @@ namespace IcoSphere {
                 testBall.transform.position = icoSphere.GetAreaCenter(i);
             } else {
                 testBall.transform.position = Vector3.zero;
+            }
+        }
+
+        // 修改高亮
+        private void TestHighlight() {
+            Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+            if (icoSphere.TryPickArea(ray, out int i)) {
+                icoSphere.SetAreaColor(i, highlight);
             }
         }
     }

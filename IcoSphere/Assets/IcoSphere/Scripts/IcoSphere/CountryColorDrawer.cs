@@ -49,18 +49,19 @@ namespace IcoSphere {
             if (Input.GetMouseButton(0)) {
                 CountrySetting cs = GetCountrySetting(nowCountryName);
                 if (cs.IsValid()) {
-                    icoSphere.DrawHexColorToComputeShader(cs.col, cs.id);
+                    icoSphere.SetRayHexCountry(cs.col, cs.id);
                 }
             }
+
         }
 
         private void SetRayHexColor() {
             if (preCountryName != nowCountryName) {
                 CountrySetting cs = GetCountrySetting(nowCountryName);
                 if (cs.IsValid()) {
-                    icoSphere.SetRayHexColorToShader(cs.col);
+                    icoSphere.SetRayHexCol(cs.col);
                 } else {
-                    icoSphere.SetRayHexColorToShader(Color.white);
+                    icoSphere.SetRayHexCol(Color.white);
                 }
                 preCountryName = nowCountryName;
             }
