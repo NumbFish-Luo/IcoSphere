@@ -14,6 +14,7 @@ namespace IcoSphere {
         [SerializeField] private float camRadius = 1.0f;
         [SerializeField] private float sphereRadius = 1.0f;
         [SerializeField] private float lineWidth = 0.00005f;
+        [SerializeField] private SphericalRvtManager sphericalRvtManager;
 
         private bool supportsComputeShaders;
         private Camera cam;
@@ -104,6 +105,8 @@ namespace IcoSphere {
                 return;
             }
             try {
+                sphericalRvtManager?.Tick(cam);
+
                 Plane[] frustumPlanes = GeometryUtility.CalculateFrustumPlanes(cam);
                 Vector3 camPos = cam.transform.position;
                 computeShader.SetVectorArray("_FrustumPlanes", PlanesToVector4(frustumPlanes));
@@ -165,6 +168,14 @@ namespace IcoSphere {
             pack = Pack.Read(recursion);
             FreeBufs();
             NewBufs(pack);
+            InitSphericalRvt();
+        }
+
+        private void InitSphericalRvt() {
+            if (sphericalRvtManager == null) {
+                sphericalRvtManager = SphericalRvtManager.FindOrCreate(this);
+            }
+            sphericalRvtManager.Initialize(this, mat, cam);
         }
 
         public bool CheckSupportsComputeShaders() {
@@ -513,6 +524,37 @@ namespace IcoSphere {
                 return -1;
             }
             return pack.posVerts[i].v;
+        }
+
+        // 设置单个地块的地形类型, 由SphericalRvtManager负责同步到GPU buffer和RVT缓存
+        public bool SetAreaTerrain(int areaId, TerrainType terrainType) {
+            if (!IsValidAreaId(areaId)) {
+                return false;
+            }
+
+            if (sphericalRvtManager == null) {
+                return false;
+            }
+
+            return sphericalRvtManager.SetAreaTerrain(areaId, terrainType);
+        }
+
+        // 批量设置地块地形类型
+        public void SetAreaTerrains(IReadOnlyList<int> areaIds, TerrainType terrainType) {
+            if (sphericalRvtManager == null) {
+                return;
+            }
+
+            sphericalRvtManager.SetAreaTerrains(areaIds, terrainType);
+        }
+
+        // 读取地块当前地形类型
+        public TerrainType GetAreaTerrain(int areaId) {
+            if (!IsValidAreaId(areaId) || sphericalRvtManager == null) {
+                return TerrainType.Plains;
+            }
+
+            return sphericalRvtManager.GetAreaTerrain(areaId);
         }
 
         // 用射线拾取地块

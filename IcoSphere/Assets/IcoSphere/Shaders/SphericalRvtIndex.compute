@@ -1,0 +1,15 @@
+#pragma kernel Fill
+
+RWTexture2D<float4> _Result;
+int2 _Offset;
+int2 _Size;
+float4 _Value;
+
+[numthreads(8, 8, 1)]
+void Fill(uint3 id : SV_DispatchThreadID) {
+    if (id.x >= (uint)_Size.x || id.y >= (uint)_Size.y) {
+        return;
+    }
+
+    _Result[int2(id.xy) + _Offset] = _Value;
+}

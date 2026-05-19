@@ -5,6 +5,8 @@ Shader "Custom/ComputeShader/Tri" {
         _Radius ("Radius", Float) = 1.0
         _LineWidth ("Line Width", Float) = 0.0003
         _RayHexCol ("Ray Hex Col", Color) = (1.0, 1.0, 1.0, 1.0)
+        [HideInInspector] _UseTerrainTextures ("Use Terrain Textures", Float) = 0.0
+        [HideInInspector] _UseSphericalRvt ("Use Spherical RVT", Float) = 0.0
     }
     SubShader {
         Tags {
@@ -53,9 +55,15 @@ Shader "Custom/ComputeShader/Tri" {
                 float t; // 射线参数t (交点到原点的距离)
             };
 
+            struct AreaTerrainData {
+                float4 info; // x: terrain id, y: uv repeat, z/w: uv offset
+                float4 tint;
+            };
+
             StructuredBuffer<InstanceData> _AllInstancesData;
             StructuredBuffer<InstanceData> _VisibleInstancesData;
             StructuredBuffer<RayData> _RayResult;
+            StructuredBuffer<AreaTerrainData> _AreaTerrainData;
 
             struct Attributes {
                 float4 vertex : POSITION;
@@ -83,6 +91,12 @@ Shader "Custom/ComputeShader/Tri" {
 
             TEXTURE2D(_BaseMap);
             SAMPLER(sampler_BaseMap);
+            TEXTURE2D_ARRAY(_TerrainAlbedoArray);
+            SAMPLER(sampler_TerrainAlbedoArray);
+            TEXTURE2D(_SphericalRvtIndexTex);
+            SAMPLER(sampler_SphericalRvtIndexTex);
+            TEXTURE2D_ARRAY(_SphericalRvtAlbedoArray);
+            SAMPLER(sampler_SphericalRvtAlbedoArray);
 
             CBUFFER_START(UnityPerMaterial)
                 float4 _BaseMap_ST;
@@ -90,6 +104,12 @@ Shader "Custom/ComputeShader/Tri" {
                 float _Radius;
                 float _LineWidth;
                 half4 _RayHexCol;
+                float _UseTerrainTextures;
+                float _UseSphericalRvt;
+                float _TerrainDirectRepeat;
+                float4 _TerrainGlobalRepeat;
+                float _SphericalRvtPageSizeY;
+                int _TerrainTextureCount;
             CBUFFER_END
 
             // 将p投影到平面上, 已知这个平面的法线n, 以及这个平面上的一个点q
@@ -200,12 +220,46 @@ Shader "Custom/ComputeShader/Tri" {
             // 纬度  (Latitude): (-0.5, 0.5] * pi
             float2 ToLonLat(float3 p) {
                 p = normalize(p);
-                return float2(atan2(p.y, p.x), asin(p.z));
+                return float2(atan2(p.z, p.x), asin(p.y));
+            }
+
+            float2 ToLonLatUv(float3 p) {
+                const float INV_PI = 0.31830988618;
+                float2 lonLat = ToLonLat(p) * INV_PI;
+                return float2(frac((lonLat.x + 1.0) * 0.5), saturate(lonLat.y + 0.5));
             }
 
             float FloatEqual(float a, float b) {
                 const float EPS = 1e-6;
                 return 1.0 - step(EPS, abs(a - b));
+            }
+
+            float4 SampleAreaTerrain(uint vid, float3 posWS, float4 fallbackCol) {
+                if (_UseTerrainTextures < 0.5 || _TerrainTextureCount <= 0) {
+                    return fallbackCol;
+                }
+
+                AreaTerrainData area = _AreaTerrainData[vid];
+                uint terrainId = min((uint)round(area.info.x), (uint)(_TerrainTextureCount - 1));
+                float2 sphereUv = ToLonLatUv(posWS);
+                float repeat = max(area.info.y * max(_TerrainDirectRepeat, 0.0001), 0.0001);
+                float2 sourceUv = frac(sphereUv * repeat + area.info.zw);
+                float4 terrainCol = SAMPLE_TEXTURE2D_ARRAY(_TerrainAlbedoArray, sampler_TerrainAlbedoArray, sourceUv, terrainId);
+                return terrainCol * area.tint;
+            }
+
+            float4 SampleSphericalRvt(float3 posWS, float4 fallbackCol) {
+                if (_UseSphericalRvt < 0.5) {
+                    return fallbackCol;
+                }
+
+                float2 sphereUv = ToLonLatUv(posWS);
+                float4 indexData = SAMPLE_TEXTURE2D(_SphericalRvtIndexTex, sampler_SphericalRvtIndexTex, sphereUv);
+                float slice = max(indexData.x, 0.0);
+                float2 pageMin = indexData.yz;
+                float2 pageSize = max(float2(indexData.w, _SphericalRvtPageSizeY), 1e-6);
+                float2 localUv = frac((sphereUv - pageMin) / pageSize);
+                return SAMPLE_TEXTURE2D_ARRAY(_SphericalRvtAlbedoArray, sampler_SphericalRvtAlbedoArray, localUv, slice);
             }
 
             half4 frag(Varyings i) : SV_Target {
@@ -239,6 +293,8 @@ Shader "Custom/ComputeShader/Tri" {
                     vid = i.v2.w;
                 }
                 col.rgb = _AllInstancesData[vid].col.rgb;
+                col = SampleAreaTerrain(vid, p, col);
+                col = SampleSphericalRvt(p, col);
                 col = lerp(col, colLine, l);
 
                 float t = (sin(_Time.y) + 1.0) * 0.5;

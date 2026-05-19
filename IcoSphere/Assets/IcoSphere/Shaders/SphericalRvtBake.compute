@@ -1,0 +1,43 @@
+#pragma kernel Bake
+
+Texture2DArray<float4> _TerrainAlbedoArray;
+Texture2D<float> _TerrainIdMap;
+RWTexture2DArray<float4> _RvtAlbedoArray;
+
+int _Slice;
+int _TileSize;
+int _TerrainTextureSize;
+int _TerrainTextureCount;
+int2 _TerrainIdMapSize;
+float2 _PageMin;
+float2 _PageSize;
+float2 _TerrainRepeat;
+
+[numthreads(8, 8, 1)]
+void Bake(uint3 id : SV_DispatchThreadID) {
+    if (id.x >= (uint)_TileSize || id.y >= (uint)_TileSize) {
+        return;
+    }
+
+    float2 tileUv = (float2(id.xy) + 0.5) / (float)_TileSize;
+    float2 sphereUv = _PageMin + tileUv * _PageSize;
+    sphereUv.x = frac(sphereUv.x);
+    sphereUv.y = saturate(sphereUv.y);
+
+    int2 mapCoord = int2(
+        clamp((int)floor(sphereUv.x * _TerrainIdMapSize.x), 0, _TerrainIdMapSize.x - 1),
+        clamp((int)floor(sphereUv.y * _TerrainIdMapSize.y), 0, _TerrainIdMapSize.y - 1)
+    );
+
+    float rawTerrainId = _TerrainIdMap.Load(int3(mapCoord, 0));
+    int terrainId = clamp((int)round(rawTerrainId), 0, max(_TerrainTextureCount - 1, 0));
+
+    float2 sourceUv = frac(sphereUv * _TerrainRepeat);
+    int2 sourceCoord = int2(
+        clamp((int)floor(sourceUv.x * _TerrainTextureSize), 0, _TerrainTextureSize - 1),
+        clamp((int)floor(sourceUv.y * _TerrainTextureSize), 0, _TerrainTextureSize - 1)
+    );
+
+    float4 albedo = _TerrainAlbedoArray.Load(int4(sourceCoord, terrainId, 0));
+    _RvtAlbedoArray[int3(id.xy, _Slice)] = albedo;
+}
