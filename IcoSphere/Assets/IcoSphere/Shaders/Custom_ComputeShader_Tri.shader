@@ -139,14 +139,12 @@ Shader "Custom/ComputeShader/Tri" {
             }
 
             float SampleAreaGeometryHeight(uint vid) {
-                if (_UseTerrainGeometry < 0.5 || _TerrainTextureCount <= 0) {
+                if (_UseTerrainGeometry < 0.5) {
                     return 0.0;
                 }
 
                 AreaTerrainData area = _AreaTerrainData[vid];
-                uint terrainId = min((uint)round(area.info.x), (uint)(_TerrainTextureCount - 1));
-                float height01 = _TerrainHeightArray.SampleLevel(sampler_TerrainHeightArray, float3(area.info.zw, (float)terrainId), 0.0).r;
-                return (height01 - _TerrainGeometryHeightCenter) * _TerrainGeometryHeightScale;
+                return (area.tangent.w - _TerrainGeometryHeightCenter) * _TerrainGeometryHeightScale;
             }
 
             Varyings vert(Attributes i, uint id : SV_InstanceID) {

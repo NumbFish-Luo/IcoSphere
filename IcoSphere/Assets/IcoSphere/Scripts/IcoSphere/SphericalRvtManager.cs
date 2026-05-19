@@ -116,6 +116,7 @@ namespace IcoSphere {
         private Texture2DArray terrainAlbedoArray;
         private Texture2DArray terrainHeightArray;
         private Texture2DArray terrainMaskArray;
+        private float[] terrainGeometryHeightSamples = new float[TERRAIN_COUNT];
         private Texture2D terrainIdMap;
         private float[] terrainIdMapData;
         private RenderTexture indexTexture;
@@ -162,8 +163,8 @@ namespace IcoSphere {
                 return;
             }
 
-            CreateAreaTerrainData();
             CreateTerrainTextureArrays();
+            CreateAreaTerrainData();
             BuildTerrainIdMap();
             CreateRvtTextures();
             BuildPages();
@@ -229,6 +230,7 @@ namespace IcoSphere {
             }
 
             areaTerrainData[areaId].info.x = (uint)terrainType;
+            areaTerrainData[areaId].tangent.w = GetTerrainGeometryHeight01(terrainType);
             areaTerrainBuffer.SetData(areaTerrainData, areaId, areaId, 1);
             terrainMapDirty = true;
             return true;
@@ -243,6 +245,7 @@ namespace IcoSphere {
                 int areaId = areaIds[i];
                 if (areaId >= 0 && areaId < areaTerrainData.Length) {
                     areaTerrainData[areaId].info.x = (uint)terrainType;
+                    areaTerrainData[areaId].tangent.w = GetTerrainGeometryHeight01(terrainType);
                 }
             }
 
@@ -270,7 +273,7 @@ namespace IcoSphere {
                     info = new Vector4((uint)terrainType, uvScale, offset.x, offset.y),
                     tint = Vector4.one,
                     center = new Vector4(center.x, center.y, center.z, areaRadius),
-                    tangent = new Vector4(tangent.x, tangent.y, tangent.z, 0.0f),
+                    tangent = new Vector4(tangent.x, tangent.y, tangent.z, GetTerrainGeometryHeight01(terrainType)),
                     bitangent = new Vector4(bitangent.x, bitangent.y, bitangent.z, 0.0f)
                 };
             }
@@ -317,6 +320,15 @@ namespace IcoSphere {
             return TerrainType.Plains;
         }
 
+        private float GetTerrainGeometryHeight01(TerrainType terrainType) {
+            int terrainIndex = Mathf.Clamp((int)terrainType, 0, TERRAIN_COUNT - 1);
+            if (terrainGeometryHeightSamples == null || terrainGeometryHeightSamples.Length != TERRAIN_COUNT) {
+                return terrainGeometryHeightCenter;
+            }
+
+            return terrainGeometryHeightSamples[terrainIndex];
+        }
+
         private float EstimateAreaRadius(int areaId, Vector3 center) {
             float sum = 0.0f;
             int count = 0;
@@ -360,6 +372,9 @@ namespace IcoSphere {
 
         private void CreateTerrainTextureArrays() {
             terrainTextureSize = Mathf.Max(1, terrainTextureSize);
+            for (int i = 0; i < terrainGeometryHeightSamples.Length; ++i) {
+                terrainGeometryHeightSamples[i] = terrainGeometryHeightCenter;
+            }
             terrainAlbedoArray = CreateTerrainTextureArray(
                 "SphericalRvtTerrainAlbedoArray",
                 terrainAlbedoTextures,
@@ -370,7 +385,8 @@ namespace IcoSphere {
                 "SphericalRvtTerrainHeightArray",
                 terrainHeightTextures,
                 _ => new Color(0.5f, 0.5f, 0.5f, 1.0f),
-                true
+                true,
+                StoreTerrainGeometryHeightSample
             );
             terrainMaskArray = CreateTerrainTextureArray(
                 "SphericalRvtTerrainMaskArray",
@@ -380,7 +396,12 @@ namespace IcoSphere {
             );
         }
 
-        private Texture2DArray CreateTerrainTextureArray(string textureName, Texture2D[] sourceTextures, Func<int, Color> fallbackColor, bool linear) {
+        private Texture2DArray CreateTerrainTextureArray(
+            string textureName,
+            Texture2D[] sourceTextures,
+            Func<int, Color> fallbackColor,
+            bool linear,
+            Action<int, Texture2D> onCopyReady = null) {
             Texture2DArray textureArray = new(
                 terrainTextureSize,
                 terrainTextureSize,
@@ -398,10 +419,22 @@ namespace IcoSphere {
             for (int i = 0; i < TERRAIN_COUNT; ++i) {
                 Texture2D source = sourceTextures != null && i < sourceTextures.Length ? sourceTextures[i] : null;
                 using TextureCopy copy = TextureCopy.From(source, terrainTextureSize, fallbackColor(i), linear);
+                onCopyReady?.Invoke(i, copy.Texture);
                 textureArray.SetPixels32(copy.Texture.GetPixels32(), i, 0);
             }
             textureArray.Apply(true, false);
             return textureArray;
+        }
+
+        private void StoreTerrainGeometryHeightSample(int terrainIndex, Texture2D heightTexture) {
+            if (heightTexture == null || terrainIndex < 0 || terrainIndex >= TERRAIN_COUNT) {
+                return;
+            }
+
+            int x = Mathf.Clamp(Mathf.RoundToInt((heightTexture.width - 1) * 0.5f), 0, heightTexture.width - 1);
+            int y = Mathf.Clamp(Mathf.RoundToInt((heightTexture.height - 1) * 0.5f), 0, heightTexture.height - 1);
+            Color c = heightTexture.GetPixel(x, y);
+            terrainGeometryHeightSamples[terrainIndex] = Mathf.Clamp01((c.r + c.g + c.b) / 3.0f);
         }
 
         private void BuildTerrainIdMap() {
