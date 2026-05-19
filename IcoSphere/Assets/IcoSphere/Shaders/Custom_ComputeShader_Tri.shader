@@ -224,8 +224,7 @@ Shader "Custom/ComputeShader/Tri" {
             }
 
             float2 ToLonLatUv(float3 p) {
-                const float INV_PI = 0.31830988618;
-                float2 lonLat = ToLonLat(p) * INV_PI;
+                float2 lonLat = ToLonLat(p) * 0.3183099;
                 return float2(frac((lonLat.x + 1.0) * 0.5), saturate(lonLat.y + 0.5));
             }
 
