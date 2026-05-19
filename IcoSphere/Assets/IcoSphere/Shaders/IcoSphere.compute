@@ -1,5 +1,8 @@
 #pragma kernel Main
 
+// 为了性能, 限制不能一次性传输太多数据给compute shader去动态修改颜色
+#define MAX_DRAW_HEX_COUNT 100
+
 struct InstanceData {
     uint id; // 三角形id
     float4 v0;
@@ -38,10 +41,10 @@ struct DrawHexData {
 
 // input: Common
 RWStructuredBuffer<InstanceData> _AllInstancesData;
-RWStructuredBuffer<VertData> _VertData;
 uint _MaxNum;
 
 // input: Main
+RWStructuredBuffer<VertData> _VertData; // 顶点数据, 也是六边形数据
 RWStructuredBuffer<DrawHexData> _DrawHexData; // 长度只有1, 设置射线颜色, col.a为是否绘制射线颜色
 float4 _FrustumPlanes[6];
 float _MaxDistance;
@@ -196,20 +199,27 @@ void Main(uint3 id : SV_DispatchThreadID) {
     float3 v2 = data.v2.xyz;
 
     // 六边形颜色绘制
-    DrawHexData drawHex = _DrawHexData[0];
-    if (drawHex.id == i) {
+    [loop]
+    for (uint j = 0; j < MAX_DRAW_HEX_COUNT; ++j) {
+        DrawHexData drawHex = _DrawHexData[j];
+        uint k = drawHex.id;
+        // 检测到非法值提前退出循环
+        if (k >= _MaxNum) {
+            break;
+        }
+
         // 绘制顶点色
-        VertData vertData = _VertData[i];
+        VertData vertData = _VertData[k];
         if (drawHex.mode == 0) {
             vertData.col = drawHex.col;
         } else {
             vertData.replace = drawHex.col;
         }
-        _VertData[i] = vertData;
+        _VertData[k] = vertData;
 
-        // 然后重置画笔数据
+        // 然后重置画笔数据为非法值
         drawHex.id = _MaxNum;
-        _DrawHexData[0] = drawHex;
+        _DrawHexData[j] = drawHex;
     }
 
     // 视锥剔除

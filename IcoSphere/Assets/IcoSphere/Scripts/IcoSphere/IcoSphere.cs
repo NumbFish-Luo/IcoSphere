@@ -32,6 +32,7 @@ namespace IcoSphere {
         private Pack pack;
         private InstanceData[] instanceData;
         private VertData[] vertData;
+        private DrawHexData[] drawHexData;
 
         // 初始化完成回调
         public UnityAction OnInitOver;
@@ -89,6 +90,8 @@ namespace IcoSphere {
             HighlightMode = 1  // 替换颜色高亮, col.rgb: 替换色, col.a: 插值t
         }
 
+        public const int MAX_DRAW_HEX_COUNT = 100; // 为了性能, 限制不能一次性传输太多数据给compute shader去动态修改颜色
+
         private void Awake() {
             supportsComputeShaders = CheckSupportsComputeShaders();
         }
@@ -125,8 +128,6 @@ namespace IcoSphere {
                 computeShader.SetVectorArray("_FrustumPlanes", PlanesToVec4(frustumPlanes));
                 computeShader.SetFloat("_MaxDistance", cam.farClipPlane);
                 computeShader.SetVector("_CamPos", camPos);
-                computeShader.SetFloat("_InstanceRadius", instanceRadius);
-                computeShader.SetInt("_MaxNum", pack.tris.Length);
 
                 // 射线检测
                 Ray ray = cam.ScreenPointToRay(Input.mousePosition);
@@ -144,7 +145,6 @@ namespace IcoSphere {
                 Bounds renderBounds = new(camPos, new Vector3(maxDistance * 2, maxDistance * 2, maxDistance * 2));
 
                 // 材质参数设置
-                mat.SetFloat("_Radius", sphereRadius);
                 mat.SetFloat("_LineWidth", lineWidth * sphereRadius);
 
                 Graphics.DrawMeshInstancedIndirect(
@@ -181,6 +181,7 @@ namespace IcoSphere {
             pack = Pack.Read(recursion);
             FreeBufs();
             NewBufs(pack);
+            InitShaderStaticData();
 
             // 完成初始化后执行注册的回调
             OnInitOver?.Invoke();
@@ -224,41 +225,46 @@ namespace IcoSphere {
             return m;
         }
 
-        private RayData[] NewDefaultRayData() => new RayData[1] { new() { tid = (uint)pack.tris.Length } };
-        private DrawHexData[] NewDefaultDrawHexData() => new DrawHexData[1] { new() { id = (uint)pack.tris.Length } };
+        private RayData NewDefaultRayData() => new() { tid = (uint)pack.tris.Length };
+        private DrawHexData NewDefaultDrawHexData() => new() { id = (uint)pack.tris.Length };
 
         private void NewBufs(Pack p) {
-            int n = p.tris.Length;
+            int nTris = p.tris.Length;
 
             // ---- allBuf ----
-            instanceData = new InstanceData[n];
-            for (uint i = 0; i < n; ++i) {
+            instanceData = new InstanceData[nTris];
+            for (uint i = 0; i < nTris; ++i) {
                 instanceData[i] = NewInstanceData(p, i);
             }
             int instanceStride = Marshal.SizeOf(typeof(InstanceData));
-            allBuf = ComputeBufManager.NewBuf(n, instanceStride);
+            allBuf = ComputeBufManager.NewBuf(nTris, instanceStride);
             allBuf.SetData(instanceData);
 
             // ---- visibleBuf ----
-            visibleBuf = ComputeBufManager.NewBuf(n, instanceStride, ComputeBufferType.Append);
+            visibleBuf = ComputeBufManager.NewBuf(nTris, instanceStride, ComputeBufferType.Append);
 
             // ---- vertBuf ----
-            int m = p.verts.Length;
-            vertData = new VertData[m];
-            for (uint i = 0; i < m; ++i) {
+            int nVerts = p.verts.Length;
+            vertData = new VertData[nVerts];
+            for (uint i = 0; i < nVerts; ++i) {
                 vertData[i] = NewVertData();
             }
             int vertStride = Marshal.SizeOf(typeof(VertData));
-            vertBuf = ComputeBufManager.NewBuf(m, vertStride);
+            vertBuf = ComputeBufManager.NewBuf(nVerts, vertStride);
             vertBuf.SetData(vertData);
 
             // ---- rayBuf ----
-            rayBuf = ComputeBufManager.NewBuf(n, Marshal.SizeOf(typeof(RayData)));
-            rayBuf.SetData(NewDefaultRayData());
+            rayBuf = ComputeBufManager.NewBuf(1, Marshal.SizeOf(typeof(RayData)));
+            rayBuf.SetData(new RayData[1] { NewDefaultRayData() });
 
             // ---- drawHexBuf ----
-            drawHexBuf = ComputeBufManager.NewBuf(n, Marshal.SizeOf(typeof(DrawHexData)));
-            drawHexBuf.SetData(NewDefaultDrawHexData());
+            int nDrawHex = MAX_DRAW_HEX_COUNT;
+            drawHexData = new DrawHexData[nDrawHex];
+            for (uint i = 0; i < nDrawHex; ++i) {
+                drawHexData[i] = NewDefaultDrawHexData();
+            }
+            drawHexBuf = ComputeBufManager.NewBuf(nDrawHex, Marshal.SizeOf(typeof(DrawHexData)));
+            drawHexBuf.SetData(drawHexData);
 
             // ---- argsBuf ----
             argsBuf = ComputeBufManager.NewBuf(1, args.Length * sizeof(uint), ComputeBufferType.IndirectArguments);
@@ -269,6 +275,11 @@ namespace IcoSphere {
             args[4] = 0; // Start Instance Location
             argsBuf.SetData(args);
 
+            Debug.Log($"Buffers created successfully: {nTris} instances");
+        }
+
+        // 初始化shader的不会随着运行一直改变的静态数据
+        private void InitShaderStaticData() {
             // ---- kernelMainId ---- 
             kernelMainId = computeShader.FindKernel(kernelMainName);
             if (kernelMainId < 0) {
@@ -279,11 +290,16 @@ namespace IcoSphere {
             computeShader.SetBuffer(kernelMainId, "_AllInstancesData", allBuf);
             mat.SetBuffer("_AllInstancesData", allBuf);
 
-            computeShader.SetBuffer(kernelMainId, "_VertData", vertBuf);
-            mat.SetBuffer("_VertData", vertBuf);
+            computeShader.SetInt("_MaxNum", pack.tris.Length);
 
             // ---- Input: Main ----
             computeShader.SetBuffer(kernelMainId, "_DrawHexData", drawHexBuf);
+
+            computeShader.SetBuffer(kernelMainId, "_VertData", vertBuf);
+            mat.SetBuffer("_VertData", vertBuf);
+
+            computeShader.SetFloat("_InstanceRadius", instanceRadius);
+            mat.SetFloat("_Radius", sphereRadius);
 
             // ---- Output: Main ----
             computeShader.SetBuffer(kernelMainId, "_VisibleInstancesData", visibleBuf);
@@ -291,8 +307,6 @@ namespace IcoSphere {
 
             computeShader.SetBuffer(kernelMainId, "_RayResult", rayBuf);
             mat.SetBuffer("_RayResult", rayBuf);
-
-            Debug.Log($"Buffers created successfully: {n} instances");
         }
 
         // 对于单个三角形, 需要知道的信息有3个顶点坐标值, 还有毗邻的3个三角形中心坐标值
@@ -371,11 +385,12 @@ namespace IcoSphere {
         public void SetRayHexCountry(Color countryCol, uint countryId) {
             RayData[] outRayData = new RayData[1];
             rayBuf.GetData(outRayData);
-            drawHexBuf.SetData(new DrawHexData[1] { new() {
+            drawHexData[0] = new() {
                 id = outRayData[0].vid,
                 mode = (uint)DrawHexMode.CountryMode,
                 col = new Vector4(countryCol.r, countryCol.g, countryCol.b, countryId)
-            }});
+            };
+            drawHexBuf.SetData(drawHexData);
         }
 
         public bool TryGetRayHexCountryId(out uint countryId, out uint hexId, out RayData rayData) {
@@ -561,31 +576,61 @@ namespace IcoSphere {
         // 设置单个地块颜色
         // 注意: 只是做选中高亮效果, 如果color的透明底为0, 则相当于清除高亮
         public void SetAreaColor(int areaId, Color color) {
-            drawHexBuf.SetData(new DrawHexData[1] { new() {
+            drawHexData[0] = new() {
                 id = (uint)areaId,
                 mode = (uint)DrawHexMode.HighlightMode,
                 col = color
-            }});
+            };
+            drawHexBuf.SetData(drawHexData);
         }
 
         // 设置单个地块的国家颜色
         // 注意: 需要同时传入正确的国家颜色和国家id才行
         // 可以看CountryColorDrawer.countrySettings列表或countrySettingsDict字典获取正确的国家颜色和国家id
         public void ChangeAreaCountry(int areaId, Color countryCol, uint countryId) {
-            drawHexBuf.SetData(new DrawHexData[1] { new() {
+            drawHexData[0] = new() {
                 id = (uint)areaId,
                 mode = (uint)DrawHexMode.CountryMode,
                 col = new(countryCol.r, countryCol.g, countryCol.b, countryId)
-            }});
+            };
+            drawHexBuf.SetData(drawHexData);
         }
 
         // 批量设置多个地块为同一种颜色, 用途：批量范围内选中高亮效果, 如果color的透明底为0, 则相当于清除高亮
-        [Obsolete] public void SetAreaColors(int[] areaIds, Color color) {
-            // todo: ...
+        // 注意: 为了性能考虑, 传入的数值大小不能超过MAX_DRAW_HEX_COUNT = 100, 如果需要超过这个值, 则需要下一帧再传入剩余的数据
+        public void SetAreaColors(int[] areaIds, Color color) {
+            int n = areaIds.Length;
+            if (n > MAX_DRAW_HEX_COUNT) {
+                Debug.LogWarning($"为了性能考虑, 传入的数值大小不能超过MAX_DRAW_HEX_COUNT = {MAX_DRAW_HEX_COUNT}, 如果需要超过这个值, 则需要下一帧再传入剩余的数据");
+                n = MAX_DRAW_HEX_COUNT;
+            }
+            for (int i = 0; i < n; ++i) {
+                drawHexData[i] = new() {
+                    id = (uint)areaIds[i],
+                    mode = (uint)DrawHexMode.HighlightMode,
+                    col = color
+                };
+            }
+            drawHexBuf.SetData(drawHexData);
         }
 
-        [Obsolete] public void ChangeAreaCountries(int[] areaIds, uint countryId) {
-            // todo: ...
+        // 批量设置多个地块的国家颜色
+        // 注意: 为了性能考虑, 传入的数值大小不能超过MAX_DRAW_HEX_COUNT = 100, 如果需要超过这个值, 则需要下一帧再传入剩余的数据
+        public void ChangeAreaCountries(int[] areaIds, Color countryCol, uint countryId) {
+            int n = areaIds.Length;
+            if (n > MAX_DRAW_HEX_COUNT) {
+                Debug.LogWarning($"为了性能考虑, 传入的数值大小不能超过MAX_DRAW_HEX_COUNT = {MAX_DRAW_HEX_COUNT}, 如果需要超过这个值, 则需要下一帧再传入剩余的数据");
+                n = MAX_DRAW_HEX_COUNT;
+            }
+            Color col = new(countryCol.r, countryCol.g, countryCol.b, countryId);
+            for (int i = 0; i < n; ++i) {
+                drawHexData[i] = new() {
+                    id = (uint)areaIds[i],
+                    mode = (uint)DrawHexMode.CountryMode,
+                    col = col
+                };
+            }
+            drawHexBuf.SetData(drawHexData);
         }
 
         // 清除单个地块的特殊颜色, 并恢复默认颜色

@@ -24,7 +24,7 @@ namespace IcoSphere {
 
             // 右键持续按下时的测试代码
             if (Input.GetMouseButton(1)) {
-                TestHighlight();
+                TestRangeHighlight();
             }
         }
 
@@ -64,6 +64,21 @@ namespace IcoSphere {
             Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
             if (icoSphere.TryPickArea(ray, out int i)) {
                 icoSphere.SetAreaColor(i, highlight);
+            }
+        }
+
+        // 修改范围高亮
+        private void TestRangeHighlight() {
+            Ray ray = Camera.main.ScreenPointToRay(Input.mousePosition);
+            if (icoSphere.TryPickArea(ray, out int i)) {
+                List<int> areaIds = new() { i };
+
+                int n = icoSphere.GetNeighborCount(i);
+                for (int j = 0; j < n; ++j) {
+                    areaIds.Add(icoSphere.GetNeighborId(i, j));
+                }
+
+                icoSphere.SetAreaColors(areaIds.ToArray(), highlight);
             }
         }
     }
