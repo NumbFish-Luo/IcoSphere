@@ -1,6 +1,8 @@
 #pragma kernel Bake
 
 Texture2DArray<float4> _TerrainAlbedoArray;
+Texture2DArray<float4> _TerrainHeightArray;
+Texture2DArray<float4> _TerrainMaskArray;
 Texture2D<float> _TerrainIdMap;
 RWTexture2DArray<float4> _RvtAlbedoArray;
 
@@ -12,6 +14,8 @@ int2 _TerrainIdMapSize;
 float2 _PageMin;
 float2 _PageSize;
 float2 _TerrainRepeat;
+float _TerrainHeightShadeStrength;
+float _TerrainMaskShadeStrength;
 
 [numthreads(8, 8, 1)]
 void Bake(uint3 id : SV_DispatchThreadID) {
@@ -39,5 +43,10 @@ void Bake(uint3 id : SV_DispatchThreadID) {
     );
 
     float4 albedo = _TerrainAlbedoArray.Load(int4(sourceCoord, terrainId, 0));
+    float height = _TerrainHeightArray.Load(int4(sourceCoord, terrainId, 0)).r;
+    float mask = _TerrainMaskArray.Load(int4(sourceCoord, terrainId, 0)).r;
+    float heightShade = lerp(1.0 - _TerrainHeightShadeStrength, 1.0 + _TerrainHeightShadeStrength, saturate(height));
+    float maskShade = lerp(1.0, lerp(0.88, 1.06, saturate(mask)), saturate(_TerrainMaskShadeStrength));
+    albedo.rgb *= heightShade * maskShade;
     _RvtAlbedoArray[int3(id.xy, _Slice)] = albedo;
 }

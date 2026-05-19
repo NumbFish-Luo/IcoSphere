@@ -96,6 +96,10 @@ Shader "Custom/ComputeShader/Tri" {
             SAMPLER(sampler_BaseMap);
             TEXTURE2D_ARRAY(_TerrainAlbedoArray);
             SAMPLER(sampler_TerrainAlbedoArray);
+            TEXTURE2D_ARRAY(_TerrainHeightArray);
+            SAMPLER(sampler_TerrainHeightArray);
+            TEXTURE2D_ARRAY(_TerrainMaskArray);
+            SAMPLER(sampler_TerrainMaskArray);
             TEXTURE2D(_SphericalRvtIndexTex);
             SAMPLER(sampler_SphericalRvtIndexTex);
             TEXTURE2D_ARRAY(_SphericalRvtAlbedoArray);
@@ -110,6 +114,8 @@ Shader "Custom/ComputeShader/Tri" {
                 float _UseTerrainTextures;
                 float _UseSphericalRvt;
                 float _TerrainDirectRepeat;
+                float _TerrainHeightShadeStrength;
+                float _TerrainMaskShadeStrength;
                 float4 _TerrainGlobalRepeat;
                 float _SphericalRvtPageSizeY;
                 int _TerrainTextureCount;
@@ -251,6 +257,13 @@ Shader "Custom/ComputeShader/Tri" {
                 float repeat = max(area.info.y * max(_TerrainDirectRepeat, 0.0001), 0.0001);
                 float2 sourceUv = localUv * repeat + area.info.zw;
                 float4 terrainCol = SAMPLE_TEXTURE2D_ARRAY(_TerrainAlbedoArray, sampler_TerrainAlbedoArray, sourceUv, terrainId);
+                float height = SAMPLE_TEXTURE2D_ARRAY(_TerrainHeightArray, sampler_TerrainHeightArray, sourceUv, terrainId).r;
+                float mask = SAMPLE_TEXTURE2D_ARRAY(_TerrainMaskArray, sampler_TerrainMaskArray, sourceUv, terrainId).r;
+
+                float heightShade = lerp(1.0 - _TerrainHeightShadeStrength, 1.0 + _TerrainHeightShadeStrength, saturate(height));
+                float maskShade = lerp(1.0, lerp(0.88, 1.06, saturate(mask)), saturate(_TerrainMaskShadeStrength));
+
+                terrainCol.rgb *= heightShade * maskShade;
                 return terrainCol * area.tint;
             }
 

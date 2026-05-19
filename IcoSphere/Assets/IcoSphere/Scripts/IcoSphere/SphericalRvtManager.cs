@@ -33,7 +33,7 @@ namespace IcoSphere {
         private const int TERRAIN_COUNT = 8;
         private const TerrainType DEFAULT_TERRAIN = TerrainType.Plains;
         private static readonly string[] DEFAULT_TERRAIN_ALBEDO_PATHS = {
-            "Assets/IcoSphere/Textures/Terrain/Water_m.png",
+            null,
             "Assets/IcoSphere/Textures/Terrain/Sand1_d.png",
             "Assets/IcoSphere/Textures/Terrain/Plains1_d.png",
             "Assets/IcoSphere/Textures/Terrain/Mountain1_d.png",
@@ -41,6 +41,28 @@ namespace IcoSphere {
             "Assets/IcoSphere/Textures/Terrain/Hill3_d.png",
             "Assets/IcoSphere/Textures/Terrain/Dirt1_d.png",
             "Assets/IcoSphere/Textures/Terrain/River1_d.png"
+        };
+
+        private static readonly string[] DEFAULT_TERRAIN_HEIGHT_PATHS = {
+            "Assets/IcoSphere/Textures/Terrain/Water_h.png",
+            "Assets/IcoSphere/Textures/Terrain/Common_h.png",
+            "Assets/IcoSphere/Textures/Terrain/Plains1_h.png",
+            "Assets/IcoSphere/Textures/Terrain/Mountain1_h.png",
+            "Assets/IcoSphere/Textures/Terrain/Marsh1_h.png",
+            "Assets/IcoSphere/Textures/Terrain/Hill3_h.png",
+            "Assets/IcoSphere/Textures/Terrain/Dirt1_h.png",
+            "Assets/IcoSphere/Textures/Terrain/River1_h.png"
+        };
+
+        private static readonly string[] DEFAULT_TERRAIN_MASK_PATHS = {
+            "Assets/IcoSphere/Textures/Terrain/Water_m.png",
+            null,
+            "Assets/IcoSphere/Textures/Terrain/Plains1_m.png",
+            "Assets/IcoSphere/Textures/Terrain/Mountain1_m.png",
+            "Assets/IcoSphere/Textures/Terrain/Marsh1_m.png",
+            "Assets/IcoSphere/Textures/Terrain/Hill3_m.png",
+            "Assets/IcoSphere/Textures/Terrain/Dirt1_m.png",
+            "Assets/IcoSphere/Textures/Terrain/River1_m.png"
         };
 
         private static readonly Color[] DEFAULT_TERRAIN_COLORS = {
@@ -56,7 +78,11 @@ namespace IcoSphere {
 
         [Header("Source Terrain Textures")]
         [SerializeField] private Texture2D[] terrainAlbedoTextures = new Texture2D[TERRAIN_COUNT];
+        [SerializeField] private Texture2D[] terrainHeightTextures = new Texture2D[TERRAIN_COUNT];
+        [SerializeField] private Texture2D[] terrainMaskTextures = new Texture2D[TERRAIN_COUNT];
         [SerializeField, Range(128, 2048)] private int terrainTextureSize = 1024;
+        [SerializeField, Range(0.0f, 0.25f)] private float terrainHeightShadeStrength = 0.08f;
+        [SerializeField, Range(0.0f, 1.0f)] private float terrainMaskShadeStrength = 0.55f;
         [SerializeField] private Vector2 terrainRepeat = new(18.0f, 9.0f);
         [SerializeField] private Vector2 perAreaTextureRepeatRange = new(0.75f, 1.15f);
 
@@ -82,6 +108,8 @@ namespace IcoSphere {
         private AreaTerrainData[] areaTerrainData;
         private ComputeBuffer areaTerrainBuffer;
         private Texture2DArray terrainAlbedoArray;
+        private Texture2DArray terrainHeightArray;
+        private Texture2DArray terrainMaskArray;
         private Texture2D terrainIdMap;
         private float[] terrainIdMapData;
         private RenderTexture indexTexture;
@@ -129,7 +157,7 @@ namespace IcoSphere {
             }
 
             CreateAreaTerrainData();
-            CreateTerrainAlbedoArray();
+            CreateTerrainTextureArrays();
             BuildTerrainIdMap();
             CreateRvtTextures();
             BuildPages();
@@ -324,28 +352,50 @@ namespace IcoSphere {
             bitangent = rotation * bitangent;
         }
 
-        private void CreateTerrainAlbedoArray() {
+        private void CreateTerrainTextureArrays() {
             terrainTextureSize = Mathf.Max(1, terrainTextureSize);
-            terrainAlbedoArray = new Texture2DArray(
+            terrainAlbedoArray = CreateTerrainTextureArray(
+                "SphericalRvtTerrainAlbedoArray",
+                terrainAlbedoTextures,
+                i => DEFAULT_TERRAIN_COLORS[i],
+                false
+            );
+            terrainHeightArray = CreateTerrainTextureArray(
+                "SphericalRvtTerrainHeightArray",
+                terrainHeightTextures,
+                _ => new Color(0.5f, 0.5f, 0.5f, 1.0f),
+                true
+            );
+            terrainMaskArray = CreateTerrainTextureArray(
+                "SphericalRvtTerrainMaskArray",
+                terrainMaskTextures,
+                _ => Color.white,
+                true
+            );
+        }
+
+        private Texture2DArray CreateTerrainTextureArray(string textureName, Texture2D[] sourceTextures, Func<int, Color> fallbackColor, bool linear) {
+            Texture2DArray textureArray = new(
                 terrainTextureSize,
                 terrainTextureSize,
                 TERRAIN_COUNT,
                 TextureFormat.RGBA32,
                 true,
-                false
+                linear
             ) {
-                name = "SphericalRvtTerrainAlbedoArray",
+                name = textureName,
                 wrapMode = TextureWrapMode.Repeat,
                 filterMode = FilterMode.Bilinear,
                 anisoLevel = 4
             };
 
             for (int i = 0; i < TERRAIN_COUNT; ++i) {
-                Texture2D source = i < terrainAlbedoTextures.Length ? terrainAlbedoTextures[i] : null;
-                using TextureCopy copy = TextureCopy.From(source, terrainTextureSize, DEFAULT_TERRAIN_COLORS[i]);
-                terrainAlbedoArray.SetPixels32(copy.Texture.GetPixels32(), i, 0);
+                Texture2D source = sourceTextures != null && i < sourceTextures.Length ? sourceTextures[i] : null;
+                using TextureCopy copy = TextureCopy.From(source, terrainTextureSize, fallbackColor(i), linear);
+                textureArray.SetPixels32(copy.Texture.GetPixels32(), i, 0);
             }
-            terrainAlbedoArray.Apply(true, false);
+            textureArray.Apply(true, false);
+            return textureArray;
         }
 
         private void BuildTerrainIdMap() {
@@ -513,6 +563,8 @@ namespace IcoSphere {
 
             RvtPage page = pages[pageIndex];
             bakeCompute.SetTexture(bakeKernel, "_TerrainAlbedoArray", terrainAlbedoArray);
+            bakeCompute.SetTexture(bakeKernel, "_TerrainHeightArray", terrainHeightArray);
+            bakeCompute.SetTexture(bakeKernel, "_TerrainMaskArray", terrainMaskArray);
             bakeCompute.SetTexture(bakeKernel, "_TerrainIdMap", terrainIdMap);
             bakeCompute.SetTexture(bakeKernel, "_RvtAlbedoArray", rvtAlbedoArray);
             bakeCompute.SetInt("_Slice", page.slice);
@@ -523,6 +575,8 @@ namespace IcoSphere {
             bakeCompute.SetVector("_PageMin", new Vector4(page.minUv.x, page.minUv.y, 0.0f, 0.0f));
             bakeCompute.SetVector("_PageSize", new Vector4(page.sizeUv.x, page.sizeUv.y, 0.0f, 0.0f));
             bakeCompute.SetVector("_TerrainRepeat", new Vector4(terrainRepeat.x, terrainRepeat.y, 0.0f, 0.0f));
+            bakeCompute.SetFloat("_TerrainHeightShadeStrength", terrainHeightShadeStrength);
+            bakeCompute.SetFloat("_TerrainMaskShadeStrength", terrainMaskShadeStrength);
             int groups = Mathf.CeilToInt(tileSize / 8.0f);
             bakeCompute.Dispatch(bakeKernel, groups, groups, 1);
         }
@@ -534,7 +588,11 @@ namespace IcoSphere {
 
             targetMaterial.SetBuffer("_AreaTerrainData", areaTerrainBuffer);
             targetMaterial.SetTexture("_TerrainAlbedoArray", terrainAlbedoArray);
+            targetMaterial.SetTexture("_TerrainHeightArray", terrainHeightArray);
+            targetMaterial.SetTexture("_TerrainMaskArray", terrainMaskArray);
             targetMaterial.SetInt("_TerrainTextureCount", TERRAIN_COUNT);
+            targetMaterial.SetFloat("_TerrainHeightShadeStrength", terrainHeightShadeStrength);
+            targetMaterial.SetFloat("_TerrainMaskShadeStrength", terrainMaskShadeStrength);
             targetMaterial.SetFloat("_TerrainDirectRepeat", 1.0f);
             targetMaterial.SetVector("_TerrainGlobalRepeat", new Vector4(terrainRepeat.x, terrainRepeat.y, 0.0f, 0.0f));
 
@@ -550,15 +608,21 @@ namespace IcoSphere {
                 return;
             }
 
-            targetMaterial.SetFloat("_UseTerrainTextures", terrainAlbedoArray != null && areaTerrainBuffer != null ? 1.0f : 0.0f);
+            targetMaterial.SetFloat("_UseTerrainTextures", HasTerrainTextureArrays() && areaTerrainBuffer != null ? 1.0f : 0.0f);
             targetMaterial.SetFloat("_UseSphericalRvt", enableSphericalRvtSampling && rvtReady && CanUseRvtCompute() ? 1.0f : 0.0f);
+        }
+
+        private bool HasTerrainTextureArrays() {
+            return terrainAlbedoArray != null &&
+                   terrainHeightArray != null &&
+                   terrainMaskArray != null;
         }
 
         private bool CanUseRvtCompute() {
             return SystemInfo.supportsComputeShaders &&
                    indexCompute != null &&
                    bakeCompute != null &&
-                   terrainAlbedoArray != null &&
+                   HasTerrainTextureArrays() &&
                    terrainIdMap != null &&
                    indexTexture != null &&
                    rvtAlbedoArray != null;
@@ -578,6 +642,14 @@ namespace IcoSphere {
             if (terrainAlbedoArray != null) {
                 DestroyUnityObject(terrainAlbedoArray);
                 terrainAlbedoArray = null;
+            }
+            if (terrainHeightArray != null) {
+                DestroyUnityObject(terrainHeightArray);
+                terrainHeightArray = null;
+            }
+            if (terrainMaskArray != null) {
+                DestroyUnityObject(terrainMaskArray);
+                terrainMaskArray = null;
             }
             if (terrainIdMap != null) {
                 DestroyUnityObject(terrainIdMap);
@@ -611,11 +683,27 @@ namespace IcoSphere {
             if (terrainAlbedoTextures == null || terrainAlbedoTextures.Length != TERRAIN_COUNT) {
                 terrainAlbedoTextures = new Texture2D[TERRAIN_COUNT];
             }
+            if (terrainHeightTextures == null || terrainHeightTextures.Length != TERRAIN_COUNT) {
+                terrainHeightTextures = new Texture2D[TERRAIN_COUNT];
+            }
+            if (terrainMaskTextures == null || terrainMaskTextures.Length != TERRAIN_COUNT) {
+                terrainMaskTextures = new Texture2D[TERRAIN_COUNT];
+            }
 
             for (int i = 0; i < TERRAIN_COUNT; ++i) {
-                if (terrainAlbedoTextures[i] == null) {
-                    terrainAlbedoTextures[i] = AssetDatabase.LoadAssetAtPath<Texture2D>(DEFAULT_TERRAIN_ALBEDO_PATHS[i]);
-                }
+                LoadDefaultTerrainTexture(ref terrainAlbedoTextures[i], DEFAULT_TERRAIN_ALBEDO_PATHS[i], "_d.png");
+                LoadDefaultTerrainTexture(ref terrainHeightTextures[i], DEFAULT_TERRAIN_HEIGHT_PATHS[i], "_h.png");
+                LoadDefaultTerrainTexture(ref terrainMaskTextures[i], DEFAULT_TERRAIN_MASK_PATHS[i], "_m.png");
+            }
+        }
+
+        private static void LoadDefaultTerrainTexture(ref Texture2D slot, string assetPath, string expectedSuffix) {
+            string currentPath = slot != null ? AssetDatabase.GetAssetPath(slot) : null;
+            bool currentIsWrongKind = !string.IsNullOrEmpty(currentPath) &&
+                                      !currentPath.EndsWith(expectedSuffix, StringComparison.OrdinalIgnoreCase);
+
+            if (slot == null || currentIsWrongKind) {
+                slot = string.IsNullOrEmpty(assetPath) ? null : AssetDatabase.LoadAssetAtPath<Texture2D>(assetPath);
             }
         }
 #endif
@@ -639,8 +727,8 @@ namespace IcoSphere {
                 Texture = texture;
             }
 
-            public static TextureCopy From(Texture2D source, int size, Color fallbackColor) {
-                Texture2D copy = new(size, size, TextureFormat.RGBA32, false, false) {
+            public static TextureCopy From(Texture2D source, int size, Color fallbackColor, bool linear) {
+                Texture2D copy = new(size, size, TextureFormat.RGBA32, false, linear) {
                     wrapMode = TextureWrapMode.Repeat,
                     filterMode = FilterMode.Bilinear
                 };
@@ -657,7 +745,8 @@ namespace IcoSphere {
                 }
 
                 RenderTexture oldActive = RenderTexture.active;
-                RenderTexture tmp = RenderTexture.GetTemporary(size, size, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+                RenderTextureReadWrite readWrite = linear ? RenderTextureReadWrite.Linear : RenderTextureReadWrite.sRGB;
+                RenderTexture tmp = RenderTexture.GetTemporary(size, size, 0, RenderTextureFormat.ARGB32, readWrite);
                 Graphics.Blit(source, tmp);
                 RenderTexture.active = tmp;
                 copy.ReadPixels(new Rect(0, 0, size, size), 0, 0);
