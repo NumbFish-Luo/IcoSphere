@@ -113,9 +113,11 @@ Shader "Custom/ComputeShader/Tri" {
                 half4 _RayHexCol;
                 float _UseTerrainTextures;
                 float _UseSphericalRvt;
+                float _UseTerrainGeometry;
                 float _TerrainDirectRepeat;
                 float _TerrainHeightShadeStrength;
                 float _TerrainMaskShadeStrength;
+                float _TerrainGeometryShadeStrength;
                 float4 _TerrainGlobalRepeat;
                 float _SphericalRvtPageSizeY;
                 int _TerrainTextureCount;
@@ -124,6 +126,14 @@ Shader "Custom/ComputeShader/Tri" {
             // 将p投影到平面上, 已知这个平面的法线n, 以及这个平面上的一个点q
             float3 ProjToNormalPlane(float3 n, float3 p, float3 q) {
                 return p - n * dot(n, p - q) / dot(n, n);
+            }
+
+            float3 DisplaceTerrainPoint(float3 p, float height) {
+                if (_UseTerrainGeometry < 0.5) {
+                    return p;
+                }
+
+                return p + normalize(p) * height;
             }
 
             Varyings vert(Attributes i, uint id : SV_InstanceID) {
@@ -139,6 +149,23 @@ Shader "Custom/ComputeShader/Tri" {
                 float3 v0 = data.v0.xyz;
                 float3 v1 = data.v1.xyz;
                 float3 v2 = data.v2.xyz;
+                uint v0Id = (uint)round(data.v0.w);
+                uint v1Id = (uint)round(data.v1.w);
+                uint v2Id = (uint)round(data.v2.w);
+                float h0 = 0.0;
+                float h1 = 0.0;
+                float h2 = 0.0;
+                if (_UseTerrainGeometry > 0.5) {
+                    h0 = _AreaTerrainData[v0Id].tangent.w;
+                    h1 = _AreaTerrainData[v1Id].tangent.w;
+                    h2 = _AreaTerrainData[v2Id].tangent.w;
+                }
+                v0 = DisplaceTerrainPoint(v0, h0);
+                v1 = DisplaceTerrainPoint(v1, h1);
+                v2 = DisplaceTerrainPoint(v2, h2);
+                float3 c01 = DisplaceTerrainPoint(data.c01.xyz, (h0 + h1) * 0.5);
+                float3 c12 = DisplaceTerrainPoint(data.c12.xyz, (h1 + h2) * 0.5);
+                float3 c20 = DisplaceTerrainPoint(data.c20.xyz, (h2 + h0) * 0.5);
 
                 // 射线数据
                 RayData ray = _RayResult[0];
@@ -160,9 +187,9 @@ Shader "Custom/ComputeShader/Tri" {
                 o.normal = normalize(cross(v1 - v0, v2 - v0)); // 3点确定法线
 
                 // 需要将毗邻三角形中心坐标投影到当前法线平面上, frag中才能正确渲染3d线条, 否则可能会嵌入球体里面
-                o.c01 = float4(ProjToNormalPlane(o.normal, data.c01.xyz, o.ctr), data.c01.w);
-                o.c12 = float4(ProjToNormalPlane(o.normal, data.c12.xyz, o.ctr), data.c12.w);
-                o.c20 = float4(ProjToNormalPlane(o.normal, data.c20.xyz, o.ctr), data.c20.w);
+                o.c01 = float4(ProjToNormalPlane(o.normal, c01, o.ctr), data.c01.w);
+                o.c12 = float4(ProjToNormalPlane(o.normal, c12, o.ctr), data.c12.w);
+                o.c20 = float4(ProjToNormalPlane(o.normal, c20, o.ctr), data.c20.w);
 
                 // 转换到裁剪空间
                 i.vertex.xyz = p;
@@ -171,9 +198,9 @@ Shader "Custom/ComputeShader/Tri" {
                 // 传递其他数据
                 o.color = data.col;
                 o.uv = TRANSFORM_TEX(i.uv, _BaseMap);
-                o.v0 = data.v0;
-                o.v1 = data.v1;
-                o.v2 = data.v2;
+                o.v0 = float4(v0, data.v0.w);
+                o.v1 = float4(v1, data.v1.w);
+                o.v2 = float4(v2, data.v2.w);
                 return o;
             }
 
@@ -249,7 +276,11 @@ Shader "Custom/ComputeShader/Tri" {
 
                 AreaTerrainData area = _AreaTerrainData[vid];
                 uint terrainId = min((uint)round(area.info.x), (uint)(_TerrainTextureCount - 1));
-                float3 localPos = posWS - area.center.xyz;
+                float3 areaCenter = area.center.xyz;
+                if (_UseTerrainGeometry > 0.5) {
+                    areaCenter += normalize(areaCenter) * area.tangent.w;
+                }
+                float3 localPos = posWS - areaCenter;
                 float2 localUv = float2(
                     dot(localPos, area.tangent.xyz),
                     dot(localPos, area.bitangent.xyz)
@@ -279,6 +310,18 @@ Shader "Custom/ComputeShader/Tri" {
                 float2 pageSize = max(float2(indexData.w, _SphericalRvtPageSizeY), 1e-6);
                 float2 localUv = frac((sphereUv - pageMin) / pageSize);
                 return SAMPLE_TEXTURE2D_ARRAY(_SphericalRvtAlbedoArray, sampler_SphericalRvtAlbedoArray, localUv, slice);
+            }
+
+            float4 ApplyTerrainGeometryLighting(float4 col, float3 normalWS) {
+                if (_UseTerrainGeometry < 0.5 || _TerrainGeometryShadeStrength <= 0.0) {
+                    return col;
+                }
+
+                float3 lightDir = normalize(float3(0.35, 0.65, 0.25));
+                float ndotl = saturate(dot(normalize(normalWS), lightDir));
+                float shade = lerp(0.78, 1.12, ndotl);
+                col.rgb *= lerp(1.0, shade, saturate(_TerrainGeometryShadeStrength));
+                return col;
             }
 
             half4 frag(Varyings i) : SV_Target {
@@ -314,6 +357,7 @@ Shader "Custom/ComputeShader/Tri" {
                 col.rgb = _AllInstancesData[vid].col.rgb;
                 col = SampleAreaTerrain(vid, p, col);
                 col = SampleSphericalRvt(p, col);
+                col = ApplyTerrainGeometryLighting(col, i.normal);
                 col = lerp(col, colLine, l);
 
                 float t = (sin(_Time.y) + 1.0) * 0.5;
