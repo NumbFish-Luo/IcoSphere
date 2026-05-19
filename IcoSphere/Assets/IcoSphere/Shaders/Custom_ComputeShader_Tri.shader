@@ -268,18 +268,24 @@ Shader "Custom/ComputeShader/Tri" {
                 return terrainCol * area.tint;
             }
 
-            float4 SampleSphericalRvt(float3 posWS, float4 fallbackCol) {
+            bool TrySampleSphericalRvt(float3 posWS, out float4 rvtCol) {
+                rvtCol = 0.0;
                 if (_UseSphericalRvt < 0.5) {
-                    return fallbackCol;
+                    return false;
                 }
 
                 float2 sphereUv = ToLonLatUv(posWS);
                 float4 indexData = SAMPLE_TEXTURE2D(_SphericalRvtIndexTex, sampler_SphericalRvtIndexTex, sphereUv);
-                float slice = max(indexData.x, 0.0);
+                if (indexData.x < -0.5) {
+                    return false;
+                }
+
+                uint slice = (uint)round(indexData.x);
                 float2 pageMin = indexData.yz;
                 float2 pageSize = max(float2(indexData.w, _SphericalRvtPageSizeY), 1e-6);
                 float2 localUv = frac((sphereUv - pageMin) / pageSize);
-                return SAMPLE_TEXTURE2D_ARRAY(_SphericalRvtAlbedoArray, sampler_SphericalRvtAlbedoArray, localUv, slice);
+                rvtCol = SAMPLE_TEXTURE2D_ARRAY(_SphericalRvtAlbedoArray, sampler_SphericalRvtAlbedoArray, localUv, slice);
+                return true;
             }
 
             half4 frag(Varyings i) : SV_Target {
@@ -313,8 +319,12 @@ Shader "Custom/ComputeShader/Tri" {
                     vid = i.v2.w;
                 }
                 col.rgb = _AllInstancesData[vid].col.rgb;
-                col = SampleAreaTerrain(vid, p, col);
-                col = SampleSphericalRvt(p, col);
+                float4 rvtCol = 0.0;
+                if (TrySampleSphericalRvt(p, rvtCol)) {
+                    col = rvtCol;
+                } else {
+                    col = SampleAreaTerrain(vid, p, col);
+                }
                 col = lerp(col, colLine, l);
 
                 float t = (sin(_Time.y) + 1.0) * 0.5;

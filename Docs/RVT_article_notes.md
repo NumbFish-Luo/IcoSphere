@@ -49,17 +49,16 @@ Mip handling:
 - Sloped surfaces can show noise if the cache only provides one mip.
 - The article's fix is to provide several mip levels and compute an adjusted mip in the shader using stable terrain UV derivatives.
 
-## Local Project Overlap
+## Current Project Adaptation
 
-This repository already contains an implementation line that appears based on the same simplified RVT article:
+The `feature-zhihu-style-spherical-rvt` branch implements a first spherical adaptation of the article's simplified RVT idea:
 
-- `IcoSphere/Assets/IcoSphere/Scripts/Rvt/Rvt.cs`
-- `IcoSphere/Assets/IcoSphere/Scripts/Rvt/QuadTree.cs`
-- `IcoSphere/Assets/IcoSphere/Scripts/Rvt/VirtualCapture.cs`
-- `IcoSphere/Assets/IcoSphere/Shaders/Rvt.compute`
-- `IcoSphere/Assets/IcoSphere/Shaders/Custom_Rvt_Blit.shader`
+- `SphericalRvtManager` maintains lonlat virtual pages and a smaller physical tile cache.
+- `SphericalRvtIndex.compute` fills an index texture/page table for active pages.
+- `SphericalRvtBake.compute` bakes dirty albedo tiles from terrain layer arrays.
+- `Custom_ComputeShader_Tri.shader` samples the RVT cache on valid pages and falls back to direct per-area terrain sampling when a page is missing.
 
-The code structure matches the article's terms closely: leaf queues, physical texture indices, `Texture2DArray` albedo/normal caches, an index render texture, and compute filling of index texture values.
+This is intentionally not the article's planar XZ quadtree. The first spherical page space is lonlat so the page-table/cache/final-sampling pipeline can be validated before moving to an icosahedron-face atlas or area-cluster hierarchy.
 
 ## Remote Asset Index
 

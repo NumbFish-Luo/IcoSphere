@@ -1,113 +1,71 @@
-# 球面简化 RVT 实现步骤
+# 球面知乎式简化 RVT 实现记录
 
-目标：在当前 IcoSphere 球面地图上实现一套借鉴《大地形的一种简化 RVT》的球面版地形纹理缓存系统。实现不提交到 `main`，开发分支为 `feature-spherical-rvt-terrain`。
+目标：在 `feature-zhihu-style-spherical-rvt` 分支中，把之前“固定全局 RVT-like 原型”收敛为一版更接近《大地形的一种简化 RVT》的球面适配原型。它不是直接照搬平面 XZ 四叉树，而是在 IcoSphere 上先使用经纬度 lonlat 虚拟空间作为第一版页面空间。
 
-## 1. 分支与文档
+参考文章：
 
-1. 确认当前工作区状态。
-2. 从 `main` 新建 `feature-spherical-rvt-terrain` 分支。
-3. 把实现计划写入 `Docs/Spherical_RVT_implementation_steps.zh-CN.md`。
+- 知乎原文：https://zhuanlan.zhihu.com/p/552748937
+- 可访问镜像：https://blog.uwa4d.com/archives/USparkle_RVT.html
 
-## 2. 地形纹理输入
+## 已实现
 
-1. 使用 `Assets/IcoSphere/Textures/Terrain` 下已有资源。
-2. 建立地形类型枚举，例如 `Water`、`Sand`、`Plains`、`Mountain`、`Marsh`、`Hill`、`Dirt`、`River`。
-3. 第一版先接入 albedo/diffuse 纹理，优先保证球面能显示不同地形。
-4. 对缺失 diffuse 的地形提供 fallback，例如 `Water` 可先使用 mask 或颜色生成。
-5. 对尺寸不一致的纹理采用运行时缩放/拷贝到统一尺寸的 `Texture2DArray`。
+1. 保留 `TerrainType` 和按 area id 存储的 `AreaTerrainData`。
+2. 将地形贴图整理为三组明确的 `Texture2DArray`：
+   - `*_d.png`：diffuse/albedo，作为颜色来源。
+   - `*_h.png`：height，只用于 bake 阶段的高度明暗调制。
+   - `*_m.png`：mask/材质参数/混合遮罩，只用于材质调制。
+3. `Water` 没有 `Water_d.png`，因此 albedo 使用蓝色 fallback，不会把 `Water_h.png` 或 `Water_m.png` 当颜色贴图。
+4. `SphericalRvtManager` 维护 lonlat 虚拟页表：
+   - `pageId`
+   - 虚拟 UV 矩形
+   - 物理 `Texture2DArray` slice
+   - dirty/ready/queued 状态
+   - `lastUsedFrame`
+5. RVT 物理缓存不再等于全局页面总数。当前实现使用有限 `physicalTileCount`，相机附近页面按需分配物理 slice；旧页面按 LRU 方式回收。
+6. index texture/page table 中 inactive page 写入 `slice = -1`。final shader 看到无效 page 时回退到直接 per-area terrain 采样。
+7. bake pass 只处理 dirty pages，每帧由 `pagesToBakePerFrame` 限制更新数量。
+8. final shader 命中 RVT page 时直接采样 `_SphericalRvtAlbedoArray`，不再先做 per-area 复杂材质采样再覆盖；只有 RVT 未命中时才走 fallback。
+9. 主渲染 shader 不做 vertex 阶段地形几何高度，也不在 vertex 阶段采样地形贴图，避免重新触发 Unity shader compiler IPC 崩溃路径。
+10. 鼠标高亮、area `vid` 判断、网格线 overlay 保持原路径。
 
-## 3. 每地块地形数据
+## 当前数据流
 
-1. 新增按 area id 索引的 `AreaTerrainData`。
-2. 每个地块至少存：
-   - `terrainId`
-   - `tint`
-   - `uvOffset`
-   - `uvScale`
-3. 增加公开 API：
-   - `SetAreaTerrain(int areaId, TerrainType terrainType)`
-   - `SetAreaTerrains(IReadOnlyList<int> areaIds, TerrainType terrainType)`
-   - `GetAreaTerrain(int areaId)`
-4. 默认地形可按纬度/高度简单初始化，后续再接地图生成器或编辑器刷地形。
+```text
+camera direction
+  -> lonlat virtual uv
+  -> choose wanted virtual pages
+  -> allocate/reuse physical slices
+  -> mark dirty pages
+  -> SphericalRvtBake.compute writes albedo cache tile
+  -> SphericalRvtIndex.compute writes page table/index texture
+  -> final shader samples page table
+  -> valid slice: sample RVT albedo cache
+  -> invalid slice: fallback to vid -> AreaTerrainData -> terrain texture arrays
+```
 
-## 4. 球面 RVT 虚拟空间
+## 球面适配说明
 
-1. 第一版使用经纬度 UV 作为虚拟纹理空间：
-   ```text
-   sphere normal -> lon/lat -> uv(0..1)
-   ```
-2. 在该 UV 空间上做二维页面管理。
-3. 横向 `u=0/1` seam 使用 wrap 处理。
-4. 极区拉伸第一版接受，后续可升级为二十面体原始面 atlas 或地块聚类缓存。
+第一版使用 lonlat UV：
 
-## 5. RVT 页面管理
+```text
+sphere normal/world position -> longitude/latitude -> uv(0..1)
+```
 
-1. 新增 `SphericalRvtManager`。
-2. 维护：
-   - 活跃页面列表
-   - 物理 tile 空闲索引
-   - index texture
-   - albedo `RenderTexture` array
-3. 根据相机位置和页面中心估算屏幕重要性，选择需要更新的页面。
-4. 第一版先用固定网格页面代替完整动态四叉树，确保管线跑通；之后再扩展 split/merge。
-5. 每帧限制更新页面数量，避免卡顿。
+这比平面 XZ quadtree 更符合当前球面数据，但仍不是最终最优方案。它的优点是实现简单、page table 可以复用 2D texture；缺点是极区拉伸和经度 seam 仍然存在。后续更合理的方向是：
 
-## 6. 索引纹理
+- 二十面体原始面 atlas，每个 face 内做 page hierarchy。
+- 按 pack triangle cluster 或 area cluster 做页面。
+- 用更稳定的球面导数和多 mip cache 处理斜视角噪点。
 
-1. 新增 `SphericalRvtIndex.compute`。
-2. 每个页面写入索引纹理覆盖区域。
-3. 索引纹理 texel 存储：
-   ```text
-   physicalSlice, tileU, tileV, tileSize
-   ```
-4. shader 通过经纬度 UV 采样索引纹理，再计算物理 tile 内 UV。
+## 未实现
 
-## 7. RVT tile 生成
+1. 还没有按文章完整实现 quadtree split/merge 层级；当前是固定 lonlat grid + 相机附近工作集。
+2. 还没有 normal/height/mask 多 render target cache；当前只输出 albedo cache。
+3. 还没有 mip 链和 derivative 修正；斜角采样可能仍需要后续处理。
+4. terrain id map 由 area center 投影后 flood fill 得到，是第一版近似，不是精确地块边界光栅化。
+5. 未接入道路、贴花、编辑器刷地形等更完整的地形生产流程。
 
-1. 新增 `SphericalRvtBake.compute`。
-2. 对每个需要更新的页面：
-   - 遍历 tile 像素。
-   - 计算虚拟 UV。
-   - 从地块地形查找图读取 terrain id。
-   - 从地形源 `Texture2DArray` 采样。
-   - 写入 RVT albedo array。
-3. 第一版只写 albedo，后续再加入 height/mask/normal。
+## 验证记录
 
-## 8. UV 到地块/地形查询
-
-1. 为 bake 阶段准备一张 `terrainIdMap`。
-2. `terrainIdMap` 的 UV 空间与 RVT 虚拟空间一致。
-3. 初始化时把每个地块中心投影到经纬度 UV，并写入 terrain id。
-4. 如果出现空洞，使用邻域填充或默认地形。
-5. 后续如需精确地块边界，可改为 GPU 三角形/扇区光栅化生成 map。
-
-## 9. 球体 shader 接入
-
-1. 当前 shader 已经能算出当前像素所属 `vid`。
-2. 新增 RVT 采样路径：
-   ```text
-   world pos -> lonlat uv -> _SphericalRvtIndexTex -> _SphericalRvtAlbedoArray
-   ```
-3. 保留 fallback：
-   ```text
-   vid -> areaTerrainBuffer[vid] -> terrain source texture array
-   ```
-4. 保留当前网格线和鼠标高亮叠加。
-
-## 10. 场景绑定与验证
-
-1. 在 `IcoSphere` 场景中绑定 `SphericalRvtManager`。
-2. 运行时自动创建必要 RenderTexture/ComputeBuffer。
-3. 验证：
-   - 球体可见。
-   - 网格线可见。
-   - 不同地块能显示不同地形纹理。
-   - RVT index/albedo 资源能被 shader 正确采样。
-   - 鼠标高亮不被破坏。
-
-## 11. 提交与推送
-
-1. 检查 `git status`。
-2. 运行能在当前环境执行的验证命令。
-3. 提交到 `feature-spherical-rvt-terrain`。
-4. 推送到远端同名分支。
+- `dotnet build IcoSphere\Assembly-CSharp.csproj` 通过。
+- 已检查 `C:\Users\w\AppData\Local\Unity\Editor\Editor.log`。日志中存在旧导入过程留下的 `Custom_ComputeShader_Tri.shader(227)` 语法错误和 shader compiler IPC 记录；后续同 shader 有成功导入/编译记录，当前代码没有重新加入 vertex texture/geometry height 路径。

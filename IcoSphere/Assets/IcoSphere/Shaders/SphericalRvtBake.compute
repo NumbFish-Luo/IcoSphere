@@ -6,7 +6,7 @@ Texture2DArray<float4> _TerrainMaskArray;
 Texture2D<float> _TerrainIdMap;
 RWTexture2DArray<float4> _RvtAlbedoArray;
 
-int _Slice;
+int _PhysicalSlice;
 int _TileSize;
 int _TerrainTextureSize;
 int _TerrainTextureCount;
@@ -48,5 +48,5 @@ void Bake(uint3 id : SV_DispatchThreadID) {
     float heightShade = lerp(1.0 - _TerrainHeightShadeStrength, 1.0 + _TerrainHeightShadeStrength, saturate(height));
     float maskShade = lerp(1.0, lerp(0.88, 1.06, saturate(mask)), saturate(_TerrainMaskShadeStrength));
     albedo.rgb *= heightShade * maskShade;
-    _RvtAlbedoArray[int3(id.xy, _Slice)] = albedo;
+    _RvtAlbedoArray[int3(id.xy, _PhysicalSlice)] = albedo;
 }

@@ -1,112 +1,71 @@
-# IcoSphere 地块纹理方案与简化 RVT 的区别
+# IcoSphere Terrain Materials vs. Spherical RVT
 
-## Current IcoSphere Rendering
+## Two Rendering Paths
 
-The current sphere renderer draws many triangle instances. In the fragment shader, the code determines which hex/pent area a pixel belongs to and gets a `vid`. That `vid` is the area id.
-
-Current color lookup is conceptually:
+The IcoSphere renderer already determines the area id (`vid`) for each fragment. A direct per-area terrain material path looks like this:
 
 ```text
-pixel -> vid -> _AllInstancesData[vid].col.rgb
+pixel -> vid -> AreaTerrainData -> terrainId -> terrain Texture2DArray
 ```
 
-This is why mouse painting works: the ray pick computes a `vid`, then the compute shader writes color data into `_AllInstancesData[vid].col`.
+That path is useful as a fallback and as a simple way to prove that every hex/pent area can own a terrain type. It is not RVT by itself: if the final shader directly blends terrain material inputs every frame, the cost still lives in the final pass.
 
-## Earlier Proposed Plan
-
-For the goal "each area has its own terrain and texture", the lighter plan is:
+The simplified RVT article uses this core path instead:
 
 ```text
-areaId -> AreaTerrainData -> terrainId -> Texture2DArray slice
+world position / terrain uv
+  -> index texture / page table
+  -> physical Texture2DArray slice
+  -> baked cached tile
 ```
 
-The data would be stored per area, not per triangle:
+Expensive terrain material blending is baked into cache tiles. The final shader samples the cache.
 
-```csharp
-struct AreaTerrainData {
-    public uint terrainId;
-    public uint flags;
-    public Vector2 uvOffset;
-    public Vector2 uvScale;
-}
-```
+## Current Branch Approach
 
-Then the shader path becomes:
+`feature-zhihu-style-spherical-rvt` keeps the direct path only as fallback and adds a first spherical adaptation of the article's cache idea:
 
-```text
-pixel -> vid -> areaTerrainBuffer[vid] -> sample terrain texture array
-```
+- Virtual space: lonlat page grid.
+- Physical cache: limited albedo tile slices.
+- Page selection: pages near the camera direction.
+- Update policy: only dirty pages are baked, with a per-frame update limit.
+- Page table: an index texture stores physical slice and page rect data.
+- Fallback: invalid or non-resident pages fall back to direct per-area terrain sampling.
 
-This keeps the current indirect rendering architecture. It does not create per-area GameObjects, per-area materials, or extra draw calls.
+When RVT hits, the final shader samples `_SphericalRvtAlbedoArray` directly. It does not first sample albedo/height/mask and then overwrite the result.
 
-## What The Simplified RVT Article Does
+## Terrain Texture Channel Contract
 
-The article's method is a terrain cache system:
+Textures under `Assets/IcoSphere/Textures/Terrain` follow this convention:
 
-```text
-world position / terrain UV -> index texture -> physical texture array slice -> cached albedo/normal tile
-```
-
-It uses a quadtree over XZ terrain space. Near camera areas split into smaller nodes, far areas merge into larger nodes. Every active leaf gets a physical slot in a fixed-size `Texture2DArray`. The system blits the terrain layer blend into that slot, then the final shader samples the cached tile.
-
-This is designed for large continuous terrain where the expensive part is repeatedly blending many terrain layers per pixel.
-
-## Main Differences
-
-| Topic | Per-area terrainId plan | Article simplified RVT |
+| Suffix | Meaning | Used as color? |
 | --- | --- | --- |
-| Granularity | IcoSphere area / hex / pent cell | Quadtree leaf tile in XZ terrain space |
-| Lookup key | `vid` area id already computed by sphere shader | terrain UV samples an index texture |
-| Stored data | terrain type, tint, UV transform, optional height params | baked albedo/normal tile cache |
-| Runtime updates | only when an area's terrain changes | when camera movement causes quadtree split/merge |
-| Texture source | static terrain texture arrays | blitted/composited runtime tiles |
-| Best at | discrete per-cell terrain identity | continuous large terrain with many blended layers |
-| Engineering cost | low to medium | high, especially on a sphere |
-| CPU involvement | minimal after buffer upload | quadtree LOD management and tile update scheduling |
-| GPU cost | final shader samples terrain arrays directly | final shader samples index texture plus cached RVT texture |
-| LOD/mips | normal texture mipmaps first | custom cache LOD and derivative correction |
+| `*_d.png` | diffuse/albedo | yes |
+| `*_h.png` | height | no |
+| `*_m.png` | mask/material parameters/blend mask | no |
 
-## Suitability For This Project
+`Water` has no `Water_d.png`, so water albedo uses a blue fallback color. `Water_h.png` and `Water_m.png` must not be used as albedo.
 
-For the current IcoSphere map, the per-area plan fits the stated requirement better:
+## Why Not Planar XZ Quadtree
 
-- The world is already discrete: every playable region is an area id.
-- Picking, coloring, neighbor lookup, and country mapping already use area ids.
-- The desired data is "this area is plains/mountain/water/etc.", not necessarily a continuous terrain splat blend.
-- It is much easier to author and debug: inspect `areaId`, inspect `terrainId`, inspect sampled terrain texture.
+The article targets planar terrain and assumes XZ space can be divided by a quadtree. IcoSphere is a spherical icosahedron-derived topology, so direct XZ partitioning is unstable around the back side, poles, and seams.
 
-The article's RVT becomes attractive later if the goal changes toward:
+The first implementation uses lonlat because it is simple and lets the full RVT pipeline run:
 
-- very high-frequency continuous surface detail,
-- many blended terrain layers per visible pixel,
-- roads/decals baked into terrain texture,
-- camera-dependent terrain texture resolution,
-- or a separate planar terrain scene.
+```text
+sphere position -> lonlat uv -> page table -> physical tile cache
+```
 
-## Sphere-Specific Cost Of Adapting RVT
+This is not the final ideal spherical page space. Better future options are:
 
-Adapting the article directly to this sphere is not a drop-in job:
+- one page hierarchy per original icosahedron face,
+- pack-triangle clusters,
+- or area-cluster page tables.
 
-1. The article assumes planar XZ terrain and regular terrain UV.
-2. The sphere uses icosphere topology with hex/pent regions.
-3. A quadtree would need to become either:
-   - a hierarchy per icosahedron face,
-   - a spherical UV tile system with seam handling,
-   - or a custom area-cluster hierarchy.
-4. The index texture idea needs a stable spherical parameterization, otherwise seams and derivative-based mip selection will be painful.
-5. Cached tile generation must know how to rasterize or blit spherical area data into each tile.
+## Current Limits
 
-So RVT is powerful, but it solves a larger and different problem than "each discrete area has terrain type and texture."
-
-## Recommended Path
-
-Start with the simpler per-area terrain path:
-
-1. Add `AreaTerrainData` buffer indexed by area id.
-2. Add a `TerrainType` enum and editor/runtime APIs like `SetAreaTerrain(areaId, type)`.
-3. Build one or more `Texture2DArray` assets from the terrain textures.
-4. Modify `Custom_ComputeShader_Tri.shader` so `vid` selects terrain texture data instead of only color.
-5. Keep current grid-line rendering as an overlay.
-6. Add normal/height support after diffuse sampling is correct.
-
-After that works, evaluate whether an RVT-like cache is needed. If the terrain shader becomes too expensive because each pixel blends many layers, then borrow the article's cache idea, but adapt it as an area-cluster or spherical-face cache rather than a planar XZ quadtree.
+- The terrain id map is approximate: area centers are projected to lonlat and flood-filled, not exact cell-boundary rasterization.
+- Only albedo cache tiles are generated.
+- Normal/height/mask cache outputs are not implemented yet.
+- The article's multi-mip cache and derivative correction are not implemented yet.
+- Lonlat seam and pole stretching are accepted first-version limitations.
