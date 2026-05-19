@@ -518,10 +518,25 @@ namespace IcoSphere {
         // 用射线拾取地块
         // 如果命中地块, 返回true, 并输出areaId
         // 如果没有命中地块, 返回false
-        [Obsolete] public bool TryPickArea(Ray ray, out int areaId) {
-            // todo: ...
+        public bool TryPickArea(Ray ray, out int areaId) {
             areaId = 0;
-            return false;
+
+            // 先检测射线是否击中球体
+            if (Math.GetRayResult(Vector3.zero, sphereRadius, ray.origin, ray.direction, out Vector3 _) == false) {
+                return false;
+            }
+
+            // 再执行compute shader内容
+            computeShader.SetVector("_RayOrigin", ray.origin);
+            computeShader.SetVector("_RayDir", ray.direction);
+            visibleBuf.SetCounterValue(0);
+            int threadGroups = Mathf.CeilToInt(pack.tris.Length / 64.0f);
+            computeShader.Dispatch(kernelMainId, threadGroups, 1, 1);
+
+            RayData[] rayBufResult = new RayData[1];
+            rayBuf.GetData(rayBufResult);
+            areaId = (int)rayBufResult[0].vid;
+            return true;
         }
 
         // 设置单个地块颜色, 用途: 选中高亮、归属变化等
