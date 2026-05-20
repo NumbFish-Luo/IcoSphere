@@ -90,7 +90,7 @@ namespace IcoSphere {
             HighlightMode = 1  // 替换颜色高亮, col.rgb: 替换色, col.a: 插值t
         }
 
-        public const int MAX_DRAW_HEX_COUNT = 100; // 为了性能, 限制不能一次性传输太多数据给compute shader去动态修改颜色
+        public const int MAX_DRAW_HEX_COUNT = 1000; // 为了性能, 限制不能一次性传输太多数据给compute shader去动态修改颜色
 
         private void Awake() {
             supportsComputeShaders = CheckSupportsComputeShaders();

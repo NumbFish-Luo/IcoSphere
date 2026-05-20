@@ -1,7 +1,7 @@
 #pragma kernel Main
 
 // 为了性能, 限制不能一次性传输太多数据给compute shader去动态修改颜色
-#define MAX_DRAW_HEX_COUNT 100
+#define MAX_DRAW_HEX_COUNT 1000
 
 struct InstanceData {
     uint id; // 三角形id
