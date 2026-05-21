@@ -33,11 +33,13 @@ namespace IcoSphere {
         private InstanceData[] instanceData;
         private VertData[] vertData;
         private DrawHexData[] drawHexData;
+        private bool initialized;
 
         // 初始化完成回调
         public UnityAction OnInitOver;
 
         public float SphereRadius => sphereRadius;
+        public bool IsInitialized => initialized;
 
         // 对于单个三角形, 需要知道的信息有3个顶点坐标值, 还有毗邻的3个三角形中心坐标值
         // -----v0----
@@ -97,7 +99,7 @@ namespace IcoSphere {
         }
 
         private void Start() {
-            Init();
+            EnsureInitialized();
         }
 
         private void OnEnable() {
@@ -119,7 +121,7 @@ namespace IcoSphere {
         }
 
         private void Update() {
-            if (supportsComputeShaders == false) {
+            if (initialized == false || supportsComputeShaders == false) {
                 return;
             }
             try {
@@ -170,21 +172,44 @@ namespace IcoSphere {
             ResetMat();
         }
 
-        private void Init() {
+        public bool EnsureInitialized() {
+            if (initialized) {
+                return true;
+            }
+
+            return Init();
+        }
+
+        private bool Init() {
+            supportsComputeShaders = CheckSupportsComputeShaders();
+            if (supportsComputeShaders == false) {
+                return false;
+            }
+
             cam = Camera.main;
+            if (cam == null) {
+                Debug.LogWarning("IcoSphere初始化失败: 未找到MainCamera");
+                return false;
+            }
+
+            if (mat == null || computeShader == null) {
+                Debug.LogWarning("IcoSphere初始化失败: 材质或ComputeShader未绑定");
+                return false;
+            }
+
             mesh = NewTriMesh();
             instanceRadius = mesh.bounds.extents.magnitude * camRadius;
-            if (supportsComputeShaders == false) {
-                return;
-            }
 
             pack = Pack.Read(recursion);
             FreeBufs();
             NewBufs(pack);
             InitShaderStaticData();
 
+            initialized = true;
+
             // 完成初始化后执行注册的回调
             OnInitOver?.Invoke();
+            return true;
         }
 
         public bool CheckSupportsComputeShaders() {
@@ -398,7 +423,7 @@ namespace IcoSphere {
             hexId = 0;
             rayData = new();
 
-            if (rayBuf == null || vertBuf == null || pack.tris.Length <= 0) {
+            if (initialized == false || rayBuf == null || vertBuf == null || pack.tris == null || pack.tris.Length <= 0) {
                 return false;
             }
 

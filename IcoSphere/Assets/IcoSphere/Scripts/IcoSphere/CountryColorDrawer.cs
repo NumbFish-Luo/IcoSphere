@@ -68,6 +68,16 @@ namespace IcoSphere {
         }
 
         private void RegisterCallback() {
+            if (icoSphere == null) {
+                return;
+            }
+
+            if (icoSphere.IsInitialized) {
+                LoadCountrySettings();
+                LoadVertBufData();
+                return;
+            }
+
             icoSphere.OnInitOver += LoadCountrySettings;
             icoSphere.OnInitOver += LoadVertBufData;
         }
