@@ -241,7 +241,7 @@ Shader "Custom/ComputeShader/Tri" {
                 VertData vertData = _VertData[vid];
                 float3 vdCol = vertData.col.rgb;
                 float3 vdReplace = vertData.replace.rgb;
-                float vdReplaceT = vertData.replace.a * TimeSin01(2.0, 0.1, 1.0);
+                float vdReplaceT = vertData.replace.a; // 如果需要闪烁, 再乘TimeSin01(2.0, 0.1, 1.0);
                 col.rgb = lerp(vdCol, vdReplace, vdReplaceT);
                 col = lerp(col, colLine, l);
 
