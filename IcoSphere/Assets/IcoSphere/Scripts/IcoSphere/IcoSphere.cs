@@ -599,7 +599,7 @@ namespace IcoSphere {
         }
 
         // 设置单个地块颜色
-        // 注意: 只是做选中高亮效果, 如果color的透明底为0, 则相当于清除高亮
+        // 注意: 只是做选中高亮效果, 如果color的透明度为0, 则相当于清除高亮
         public void SetAreaColor(int areaId, Color color) {
             drawHexData[0] = new() {
                 id = (uint)areaId,
@@ -621,8 +621,8 @@ namespace IcoSphere {
             drawHexBuf.SetData(drawHexData);
         }
 
-        // 批量设置多个地块为同一种颜色, 用途：批量范围内选中高亮效果, 如果color的透明底为0, 则相当于清除高亮
-        // 注意: 为了性能考虑, 传入的数值大小不能超过MAX_DRAW_HEX_COUNT = 100, 如果需要超过这个值, 则需要下一帧再传入剩余的数据
+        // 批量设置多个地块为同一种颜色, 用途: 批量范围内选中高亮效果, 如果color的透明度为0, 则相当于清除高亮
+        // 注意: 为了性能考虑, 传入的数值大小不能超过MAX_DRAW_HEX_COUNT = 1000, 如果需要超过这个值, 则需要下一帧再传入剩余的数据
         public void SetAreaColors(int[] areaIds, Color color) {
             int n = areaIds.Length;
             if (n > MAX_DRAW_HEX_COUNT) {
