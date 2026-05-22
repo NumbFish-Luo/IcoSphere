@@ -289,7 +289,7 @@ A：请确保二进制文件放置在 `Resources/Bin/` 中，文件名如 `pack_
 A：请严格按照要求设置纹理（RGBA32、Point过滤、无Mipmap、可读写）。若仍有色差，尝试在 `CountUniqueColors` 方法中增大 `precisionLv`（精度等级）合并相近颜色。
 
 **Q：点击刷色后颜色变化不立即生效？**
-A：刷色操作修改的是 GPU 端的 `drawHexBuf`，仅高亮当前六边形区域，不会永久改变球体颜色。如需永久改变颜色，应重新执行纹理映射或保存为新的 `allBuf` 数据。
+A：刷色操作修改的是 GPU 端的 `drawHexBuf`，仅高亮当前六边形区域，不会永久改变球体颜色。如需永久改变颜色，应重新执行纹理映射或保存为新的 `vertBuf` 数据。
 
 **Q：编辑器下按 Ctrl+R 刷新脚本后球体消失？**
 A：这是已知问题（热重载后 Material 绑定丢失），将在后续实现自动重新绑定。临时解决方法：重新运行场景或 Disable/Enable `IcoSphere` 组件。
