@@ -20,8 +20,8 @@ namespace IcoSphere {
         }
 
         [SerializeField] private IcoSphere icoSphere = null;
-        [SerializeField] private string saveBytesPath = "Assets/IcoSphere/Resources/Bin/vert_buf_data.bytes";
-        [SerializeField] private string saveCfgPath = "Assets/IcoSphere/Resources/Cfg/country_settings.tsv";
+        [SerializeField] private string saveBytesPath = "Assets/IcoSphere/Resources/Bin/";
+        [SerializeField] private string saveCfgPath = "Assets/IcoSphere/Resources/Cfg/";
         [SerializeField] private Texture2D mappingTex = null;
         [SerializeField] private string nowCountryName = null;
         [SerializeField] private List<CountrySetting> countrySettings = new();
@@ -37,6 +37,22 @@ namespace IcoSphere {
             InitDict();
             SetRayHexColor();
             RegisterCallback();
+        }
+
+        public string GetSaveBytesPath() {
+            if (icoSphere == null) {
+                Debug.LogError("icoSphere为空");
+                return saveBytesPath + "vert_buf_data.bytes";
+            }
+            return saveBytesPath + "vert_buf_data_" + icoSphere.Recursion + ".bytes";
+        }
+
+        public string GetSaveCfgPath() {
+            if (icoSphere == null) {
+                Debug.LogError("icoSphere为空");
+                return saveBytesPath + "country_settings.tsv";
+            }
+            return saveCfgPath + "country_settings_" + icoSphere.Recursion + ".tsv";
         }
 
         private void InitDict() {
@@ -163,40 +179,44 @@ namespace IcoSphere {
 
         [ContextMenu("保存国家刷色数据 (.bytes)")]
         public void SaveVertBufData() {
-            icoSphere.SaveVertBufData(saveBytesPath);
-            Debug.Log("成功保存数据: " + saveBytesPath);
+            string path = GetSaveBytesPath();
+            icoSphere.SaveVertBufData(path);
+            Debug.Log("成功保存数据: " + path);
             Debug.Log("可以按Ctrl+R刷新Assets目录");
         }
 
         [ContextMenu("读取国家刷色数据 (.bytes)")]
         public void LoadVertBufData() {
-            icoSphere.LoadVertBufData(saveBytesPath);
-            Debug.Log("成功读取数据: " + saveBytesPath);
+            string path = GetSaveBytesPath();
+            icoSphere.LoadVertBufData(path);
+            Debug.Log("成功读取数据: " + path);
         }
 
         [ContextMenu("保存国家颜色配置表 (.tsv)")]
         public void SaveCountrySettings() {
-            using StreamWriter writer = new(saveCfgPath, false, Encoding.UTF8);
+            string path = GetSaveCfgPath();
+            using StreamWriter writer = new(path, false, Encoding.UTF8);
             writer.WriteLine("name\tid\tcol");
             foreach (CountrySetting cs in countrySettings) {
                 // a永远为255
                 uint rgb = Misc.ColorToHexRgb(cs.col);
                 writer.WriteLine($"{cs.name}\t{cs.id}\t#{rgb:X6}");
             }
-            Debug.Log("成功保存配置表: " + saveCfgPath);
+            Debug.Log("成功保存配置表: " + path);
             Debug.Log("可以按Ctrl+R刷新Assets目录");
         }
 
         [ContextMenu("读取国家颜色配置表 (.tsv)")]
         public void LoadCountrySettings() {
-            if (!File.Exists(saveCfgPath)) {
-                Debug.LogWarning($"配置文件不存在: {saveCfgPath}");
+            string path = GetSaveCfgPath();
+            if (!File.Exists(path)) {
+                Debug.LogWarning($"配置文件不存在: {path}");
                 return;
             }
 
             countrySettings.Clear();
 
-            using StreamReader reader = new(saveCfgPath, Encoding.UTF8);
+            using StreamReader reader = new(path, Encoding.UTF8);
             string line = reader.ReadLine(); // 读取表头, 用于忽略这一行
             while ((line = reader.ReadLine()) != null) {
                 if (string.IsNullOrWhiteSpace(line)) {
@@ -223,7 +243,7 @@ namespace IcoSphere {
                 });
             }
             InitDict();
-            Debug.Log("成功读取配置表: " + saveCfgPath);
+            Debug.Log("成功读取配置表: " + path);
         }
 
         [ContextMenu("生成地图映射配置 (不保存文件)")]

@@ -40,6 +40,7 @@ namespace IcoSphere {
 
         public float SphereRadius => sphereRadius;
         public bool IsInitialized => initialized;
+        public int Recursion => recursion;
 
         // 对于单个三角形, 需要知道的信息有3个顶点坐标值, 还有毗邻的3个三角形中心坐标值
         // -----v0----
@@ -640,7 +641,7 @@ namespace IcoSphere {
         }
 
         // 批量设置多个地块的国家颜色
-        // 注意: 为了性能考虑, 传入的数值大小不能超过MAX_DRAW_HEX_COUNT = 100, 如果需要超过这个值, 则需要下一帧再传入剩余的数据
+        // 注意: 为了性能考虑, 传入的数值大小不能超过MAX_DRAW_HEX_COUNT = 1000, 如果需要超过这个值, 则需要下一帧再传入剩余的数据
         public void ChangeAreaCountries(int[] areaIds, Color countryCol, uint countryId) {
             int n = areaIds.Length;
             if (n > MAX_DRAW_HEX_COUNT) {
