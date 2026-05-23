@@ -30,6 +30,8 @@ namespace IcoSphere {
         private string preCountryName = null;
 
         public IcoSphere TargetIcoSphere => icoSphere;
+        public List<CountrySetting> GetCountrySettings() => countrySettings;
+        public Dictionary<string, CountrySetting> GetCountrySettingsDict() => countrySettingsDict;
 
         private void Awake() {
             InitDict();

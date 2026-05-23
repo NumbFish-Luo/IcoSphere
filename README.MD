@@ -86,15 +86,16 @@ newPack.Read("mydata.bytes");
 
 文件头（Header）:
 
-5 个 `int32_t`
+6 个 `int32_t`
 
-| 字段        | 含义                     |
-| :---------- | :----------------------- |
-| vertsSize   | `verts` 数组元素个数     |
-| trisSize    | `tris` 数组元素个数      |
-| abutsSize   | `abutsData` 数组元素个数 |
-| ctrsSize    | `ctrs` 数组元素个数      |
-| adjTrisSize | `adjTris` 数组元素个数   |
+| 字段         | 含义                     |
+| :----------- | :----------------------- |
+| vertsSize    | `verts` 数组元素个数     |
+| trisSize     | `tris` 数组元素个数      |
+| abutsSize    | `abutsData` 数组元素个数 |
+| ctrsSize     | `ctrs` 数组元素个数      |
+| adjTrisSize  | `adjTris` 数组元素个数   |
+| posVertsSize | `posVerts`数组元素个数   |
 
 数据体（Body）:
 
@@ -109,19 +110,21 @@ newPack.Read("mydata.bytes");
    - `abutsData`最终会按顶点下标序号排序，但是对于`-1`非法顶点序号，会排序到最后面
 4. **ctrs**：`ctrsSize` 个 `Vec3`
 5. **adjTris**：`adjTrisSize` 个 `Tri`
+6. **posVerts**：（todo...）
 
 `Pack.ixx`文件注释中有相关描述：
 
 ```cpp
 // 二进制模型文件格式
-// Header (5 * int32_t):
-//   [vertsSize] [trisSize] [abutsSize] [ctrsSize] [adjTrisSize]
+// Header (6 * int32_t):
+//   [vertsSize] [trisSize] [abutsSize] [ctrsSize] [adjTrisSize] [posVertsSize]
 // Body:
-//   verts  : vertsSize   * Vec3          (3 * float)
-//   tris   : trisSize    * Tri           (3 * int32_t)
-//   abuts  : abutsSize   * HexAbuts::Kvs (6 * 3 * int32_t)
-//   ctrs   : ctrsSize    * Vec3          (3 * float)
-//   adjTris: adjTrisSize * Tri           (3 * int32_t)
+//   verts   : vertsSize    * Vec3          (3 * float)
+//   tris    : trisSize     * Tri           (3 * int32_t)
+//   abuts   : abutsSize    * HexAbuts::Kvs (6 * 3 * int32_t)
+//   ctrs    : ctrsSize     * Vec3          (3 * float)
+//   adjTris : adjTrisSize  * Tri           (3 * int32_t)
+//   posVerts: posVertsSize * PosVert       (3 * float + 1 * int32_t)
 ```
 
 #### 3.1.4 算法细节

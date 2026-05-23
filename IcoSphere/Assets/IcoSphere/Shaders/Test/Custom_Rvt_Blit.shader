@@ -1,12 +1,11 @@
-Shader "Custom/Rvt/Blit"
-{
-    SubShader
-    {
-        Tags { "RenderType" = "Opaque" }
+Shader "Custom/Rvt/Blit" {
+    SubShader {
+        Tags {
+            "RenderType" = "Opaque"
+        }
         LOD 100
 
-        Pass
-        {
+        Pass {
             Cull Off
             ZTest Always
             ZWrite Off
@@ -18,15 +17,13 @@ Shader "Custom/Rvt/Blit"
 
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
-            // -------------------------------------------------------------
-            // 纹理数组声明（URP 标准方式）
-            // -------------------------------------------------------------
+            // 纹理数组
             TEXTURE2D_ARRAY(albedoAtlas);
             SAMPLER(sampler_albedoAtlas);
             TEXTURE2D_ARRAY(normalAtlas);
             SAMPLER(sampler_normalAtlas);
 
-            // 地形控制贴图（最多4张）
+            // 地形控制贴图 (最多4张)
             TEXTURE2D(_Control0);
             TEXTURE2D(_Control1);
             TEXTURE2D(_Control2);
@@ -37,41 +34,37 @@ Shader "Custom/Rvt/Blit"
             SAMPLER(sampler_Control3);
 
             // 参数
-            float4 blitOffsetScale;            // x,y = offset, z,w = scale
-            float4 tileData[16];               // tileData[passIndex*4 + layer] = (tilingX, tilingY, 0, 0)
+            float4 blitOffsetScale; // x, y = offset, z, w = scale
+            float4 tileData[16]; // tileData[passIndex * 4 + layer] = (tilingX, tilingY, 0, 0)
 
-            struct Attributes
-            {
+            struct Attributes {
                 float4 positionOS : POSITION;
-                float2 uv         : TEXCOORD0;
+                float2 uv : TEXCOORD0;
             };
 
-            struct Varyings
-            {
+            struct Varyings {
                 float4 positionCS : SV_POSITION;
-                float2 uv         : TEXCOORD0;
+                float2 uv : TEXCOORD0;
             };
 
             // 顶点着色器
-            Varyings Vert(Attributes input)
-            {
+            Varyings Vert(Attributes input) {
                 Varyings output;
-                output.positionCS = TransformObjectToHClip(input.positionOS);
+                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 // 根据地块偏移和缩放重新计算 UV
                 output.uv = input.uv * blitOffsetScale.zw + blitOffsetScale.xy;
                 return output;
             }
 
-            // 混合辅助函数（单张 control 贴图 + 4层材质）
-            void SplatmapMix(int passIndex, half4 control, float2 uv, inout half4 mixedDiffuse, inout half3 mixedNormal)
-            {
+            // 混合辅助函数 (单张control贴图 + 4层材质)
+            void SplatmapMix(int passIndex, half4 control, float2 uv, inout half4 mixedDiffuse, inout half3 mixedNormal) {
                 // 获取当前层组的4个材质的平铺系数
                 float2 tiling0 = tileData[passIndex * 4 + 0].xy;
                 float2 tiling1 = tileData[passIndex * 4 + 1].xy;
                 float2 tiling2 = tileData[passIndex * 4 + 2].xy;
                 float2 tiling3 = tileData[passIndex * 4 + 3].xy;
 
-                // 采样 Albedo（使用 Sample 方法，自动使用 mip 0）
+                // 采样Albedo (使用Sample方法，自动使用mip0)
                 mixedDiffuse += control.r * albedoAtlas.Sample(sampler_albedoAtlas, float3(uv * tiling0, passIndex * 4 + 0));
                 mixedDiffuse += control.g * albedoAtlas.Sample(sampler_albedoAtlas, float3(uv * tiling1, passIndex * 4 + 1));
                 mixedDiffuse += control.b * albedoAtlas.Sample(sampler_albedoAtlas, float3(uv * tiling2, passIndex * 4 + 2));
@@ -87,15 +80,13 @@ Shader "Custom/Rvt/Blit"
                 mixedNormal += nrm;
             }
 
-            // MRT 输出结构
-            struct FragOutput
-            {
+            // MRT输出结构
+            struct FragOutput {
                 half4 color0 : SV_Target0;
                 half4 color1 : SV_Target1;
             };
 
-            FragOutput Frag(Varyings input)
-            {
+            FragOutput Frag(Varyings input) {
                 float2 uv = input.uv;
 
                 // 采样4张控制贴图（根据地形实际层数，最多16层，每4层一张控制图）

@@ -1,44 +1,40 @@
-Shader "Custom/Rvt/Terrain"
-{
-    Properties
-    {
+Shader "Custom/Rvt/Terrain" {
+    Properties {
         [HideInInspector] _Control("Control", 2D) = "red" {}
     }
-    SubShader
-    {
-        Tags { "RenderType" = "Opaque" "Queue" = "Geometry-99" }
+    SubShader {
+        Tags {
+            "RenderType" = "Opaque"
+            "Queue" = "Geometry-99"
+            "TerrainCompatible" = "True"
+        }
         LOD 200
 
-        Pass
-        {
+        Pass {
             Name "ForwardLit"
-            Tags { "LightMode" = "UniversalForward" }
+            Tags {
+                "LightMode" = "UniversalForward"
+            }
 
             HLSLPROGRAM
             #pragma vertex Vert
             #pragma fragment Frag
             #pragma target 3.5
 
-            // URP 核心关键字
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
             #pragma multi_compile_fragment _ _SHADOWS_SOFT
             #pragma multi_compile_fragment _ _REFLECTION_PROBE_BLENDING
             #pragma multi_compile_fog
 
-            // 包含 URP 核心库
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
-            // -------------------------------------------------------------
-            // 纹理数组声明（URP 标准方式）
-            // -------------------------------------------------------------
+            // 纹理数组
             TEXTURE2D(_VT_IndexTex);
             SAMPLER(sampler_VT_IndexTex);
-
             TEXTURE2D_ARRAY(_VT_AlbedoTex);
             SAMPLER(sampler_VT_AlbedoTex);
-
             TEXTURE2D_ARRAY(_VT_NormalTex);
             SAMPLER(sampler_VT_NormalTex);
 
@@ -46,30 +42,26 @@ Shader "Custom/Rvt/Terrain"
             int VT_RootSize;
             int virtualTextArraySize;
 
-            struct Attributes
-            {
-                float4 positionOS   : POSITION;
-                float2 uv           : TEXCOORD0;
-                float3 normalOS     : NORMAL;
-                float4 tangentOS    : TANGENT;
+            struct Attributes {
+                float4 positionOS : POSITION;
+                float2 uv : TEXCOORD0;
+                float3 normalOS : NORMAL;
+                float4 tangentOS : TANGENT;
             };
 
-            struct Varyings
-            {
-                float4 positionCS   : SV_POSITION;
-                float2 uv           : TEXCOORD0;
-                float3 positionWS   : TEXCOORD1;
-                float3 normalWS     : TEXCOORD2;
-                float4 tangentWS    : TEXCOORD3;   // xyz = tangent, w = sign
+            struct Varyings {
+                float4 positionCS : SV_POSITION;
+                float2 uv : TEXCOORD0;
+                float3 positionWS : TEXCOORD1;
+                float3 normalWS : TEXCOORD2;
+                float4 tangentWS : TEXCOORD3; // xyz = tangent, w = sign
                 #if defined(_MAIN_LIGHT_SHADOWS)
                     float4 shadowCoord : TEXCOORD4;
                 #endif
-                float fogFactor     : TEXCOORD5;
+                float fogFactor : TEXCOORD5;
             };
 
-            // 顶点着色器
-            Varyings Vert(Attributes input)
-            {
+            Varyings Vert(Attributes input) {
                 Varyings output;
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 output.uv = input.uv;
@@ -86,37 +78,35 @@ Shader "Custom/Rvt/Terrain"
                 return output;
             }
 
-            // 片元着色器
-            half4 Frag(Varyings input) : SV_Target
-            {
-                // 1. 采样索引贴图
+            half4 Frag(Varyings input) : SV_Target {
+                // 采样索引贴图
                 float4 indexData = SAMPLE_TEXTURE2D(_VT_IndexTex, sampler_VT_IndexTex, input.uv);
-                int    arrayIdx  = (int)indexData.r;
-                float2 offset    = indexData.yz;
-                float  blockSize = indexData.w;
+                int arrayIdx = (int)indexData.r;
+                float2 offset = indexData.yz;
+                float blockSize = indexData.w;
 
-                // 2. 计算地块内局部 UV
+                // 计算地块内局部UV
                 float2 worldPos = input.uv * VT_RootSize;
                 float2 localUV = (worldPos - offset) / blockSize;
                 localUV = saturate(localUV);
 
-                // 3. 手动计算 mipmap 等级
+                // 手动计算mipmap等级
                 float lodBias = -0.65;
                 float2 dx = ddx(worldPos * virtualTextArraySize);
                 float2 dy = ddy(worldPos * virtualTextArraySize);
                 float md = max(dot(dx, dx), dot(dy, dy));
                 float mip = clamp(0.5 * log2(md) - log2(blockSize) + lodBias, 0, 3);
 
-                // 4. 采样 Albedo 和 Normal（直接使用 SampleLevel 避免宏参数问题）
+                // 采样Albedo和Normal
                 float3 albedo = _VT_AlbedoTex.SampleLevel(sampler_VT_AlbedoTex, float3(localUV, arrayIdx), mip).rgb;
                 float3 normalTS = _VT_NormalTex.SampleLevel(sampler_VT_NormalTex, float3(localUV, arrayIdx), mip).rgb;
                 normalTS = normalTS * 2.0 - 1.0;
 
-                // 5. 切线空间法线 → 世界空间
+                // 切线空间法线 -> 世界空间
                 float3 normalWS = TransformTangentToWorld(normalTS, half3x3(input.tangentWS.xyz, GetObjectToWorldMatrix()._m01_m11_m21, input.normalWS));
                 normalWS = normalize(normalWS);
 
-                // 6. 构建 URP 输入数据
+                // 输入数据
                 InputData inputData = (InputData)0;
                 inputData.positionWS = input.positionWS;
                 inputData.normalWS = normalWS;
@@ -125,26 +115,26 @@ Shader "Custom/Rvt/Terrain"
                     inputData.shadowCoord = input.shadowCoord;
                 #endif
                 inputData.fogCoord = input.fogFactor;
-                inputData.vertexLighting = half3(0,0,0);
+                inputData.vertexLighting = half3(0, 0, 0);
                 inputData.bakedGI = 0;
                 inputData.shadowMask = 1;
                 inputData.normalizedScreenSpaceUV = 0;
 
-                // 7. 表面数据
+                // 表面数据
                 SurfaceData surfaceData = (SurfaceData)0;
                 surfaceData.albedo = albedo;
                 surfaceData.alpha = 1.0;
                 surfaceData.metallic = 0.0;
                 surfaceData.specular = 0.0;
                 surfaceData.smoothness = 0.5;
-                surfaceData.occlusion = 1.0;
+                // surfaceData.occlusion = 1.0;
                 surfaceData.emission = 0;
                 surfaceData.normalTS = normalTS;
 
-                // 8. 最终 PBR 颜色
+                // 最终PBR颜色
                 half4 color = UniversalFragmentPBR(inputData, surfaceData);
 
-                // 9. 雾效
+                // 雾效
                 color.rgb = MixFog(color.rgb, input.fogFactor);
                 return color;
             }

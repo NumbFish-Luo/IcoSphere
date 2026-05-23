@@ -3,167 +3,203 @@ using System.Collections.Generic;
 using UnityEngine;
 
 namespace IcoSphere {
+    [RequireComponent(typeof(Rvt))]
     public class VirtualCapture : MonoBehaviour {
-        private Material captureMat;
-        public Shader captureShader;
-        public TerrainData terrainData;
-        public Texture2DArray albedoAtlas;
-        public Texture2DArray normalAtlas;
-        public RenderTexture[] clipRTs;
-        private RenderBuffer[] mrtRB = new RenderBuffer[2];
-        public int mipmapCount;
-        public const int virtualTextArraySize = 512;
+        public Terrain terrain;
+        public Material captureMat;                 // 使用 URP 版 VT_Terrain_Blit 材质
+        public Texture2DArray albedoAtlas;          // 运行时生成的 Albedo 图集
+        public Texture2DArray normalAtlas;          // 运行时生成的 Normal 图集
+
+        public const int virtualTextArraySize = 512; // 与 VT_Terrain 中的尺寸保持一致
+
+        private RenderTexture[] clipRTs;
+        private RenderBuffer[] mrtBuffers;
+        private Mesh fullscreenQuad;
+        private int mipmapCount;
 
         void Awake() {
+            if (terrain == null)
+                terrain = GetComponent<Terrain>();
+
+            if (terrain == null) {
+                Debug.LogError("VirtualCapture: 未找到 Terrain 组件！");
+                return;
+            }
+
             mipmapCount = (int)Mathf.Log(virtualTextArraySize, 2);
+
+            // 创建两个临时 RT，用于存储一次 MRT 绘制的 Albedo 和 Normal
             clipRTs = new RenderTexture[2];
+            clipRTs[0] = new(virtualTextArraySize, virtualTextArraySize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            clipRTs[1] = new(virtualTextArraySize, virtualTextArraySize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+
             for (int i = 0; i < clipRTs.Length; i++) {
-                clipRTs[i] = new(
-                    width: virtualTextArraySize,
-                    height: virtualTextArraySize,
-                    depth: 16,
-                    format: RenderTextureFormat.ARGB32,
-                    readWrite: i == 0 ? RenderTextureReadWrite.sRGB : RenderTextureReadWrite.Linear
-                ) {
-                    useMipMap = true,
-                    autoGenerateMips = false
-                };
+                clipRTs[i].useMipMap = true;
+                clipRTs[i].autoGenerateMips = false;
                 clipRTs[i].Create();
             }
 
-            captureMat = new Material(captureShader);
-            for (int k = 0; k < terrainData.alphamapTextures.Length; k++) {
-                captureMat.SetTexture("_Control" + k, terrainData.alphamapTextures[k]);
+            mrtBuffers = new RenderBuffer[] { clipRTs[0].colorBuffer, clipRTs[1].colorBuffer };
+
+            // 创建全屏四边形，用于 Blit 操作（替代 GL.Begin/End）
+            fullscreenQuad = CreateFullscreenQuad();
+
+            // 将地形控制贴图绑定到材质
+            if (captureMat != null) {
+                var alphamaps = terrain.terrainData.alphamapTextures;
+                for (int i = 0; i < alphamaps.Length; i++)
+                    captureMat.SetTexture("_Control" + i, alphamaps[i]);
             }
 
-            // splatPrototypes已过时, 现在改为最新写法terrainLayers
-            // 获取TerrainLayer数组
-            TerrainLayer[] terrainLayers = terrainData.terrainLayers;
-            if (terrainLayers == null || terrainLayers.Length == 0) {
-                Debug.LogWarning("Terrain has no layers.");
-                return; // 或者根据业务逻辑处理
-            }
-
-            var tileData = new Vector4[terrainLayers.Length];
-            for (int i = 0; i < tileData.Length; i++) {
-                // 注意: TerrainLayer.tileSize是Vector2, 用法与原splatPrototypes一致
-                tileData[i] = new Vector4(
-                    terrainData.size.x / terrainLayers[i].tileSize.x,
-                    terrainData.size.z / terrainLayers[i].tileSize.y,
-                    0, 0
-                );
-            }
-
+            // 传递图集纹理到 Shader
             Shader.SetGlobalTexture("albedoAtlas", albedoAtlas);
             Shader.SetGlobalTexture("normalAtlas", normalAtlas);
-            Shader.SetGlobalVectorArray("tileData", tileData);
             Shader.SetGlobalInt("virtualTextArraySize", virtualTextArraySize);
 
-            // mrt mode
-            mrtRB = new RenderBuffer[] { clipRTs[0].colorBuffer, clipRTs[1].colorBuffer };
+            // 初始化 tileData（每个 splat 的平铺系数）
+            // 使用 TerrainLayer 数组来获取地形图层信息
+            TerrainLayer[] terrainLayers = terrain.terrainData.terrainLayers;
+            var tileData = new Vector4[terrainLayers.Length];
+            for (int i = 0; i < tileData.Length; i++) {
+                tileData[i] = new Vector4(
+                    terrain.terrainData.size.x / terrainLayers[i].tileSize.x,
+                    terrain.terrainData.size.z / terrainLayers[i].tileSize.y,
+                    0, 0);
+            }
+            Shader.SetGlobalVectorArray("tileData", tileData);
         }
 
         void OnDestroy() {
             if (clipRTs != null) {
-                for (int i = 0; i < clipRTs.Length; i++) {
-                    clipRTs[i].Release();
-                }
+                foreach (var rt in clipRTs)
+                    if (rt != null) rt.Release();
             }
+            if (fullscreenQuad != null)
+                Destroy(fullscreenQuad);
         }
 
-        // QuadTree分配了索引之后, 我们可以根据节点所在的位置和size, 去加载这块混合后的贴图, 并拷贝到Texture2DArray对应的index里
-        // 这里说的加载并不是真的加载, 如果是SVT (Streaming Virtural Texture) 那就是硬盘加载, 我们做RVT (Runtime Virtual Texture) 这里其实是实时创建
-        // 为了流程描述统一, 特意说成加载
-        // 这里实时创建有2种方式, 第一种是放个相机去拍, 这种简单也能对格子贴画, 路面等自动支持, 但是性能不好
-        // 因为渲染流程要走一遍, 相机要对地形mesh各种处理, 这些都是我们不需要的
-        // 所以我这里采用性能更高的blit方式, 缺点是做路面与贴花时需要再开发功能支持
-        // MRT (Multiple Render Targets): 允许在一次渲染过程中输出多个渲染结果
+        // 创建全屏四边形网格（NDC: -1 到 1）
+        private Mesh CreateFullscreenQuad() {
+            Mesh mesh = new Mesh {
+                vertices = new Vector3[] {
+                    new(-1, -1, 0),
+                    new( 1, -1, 0),
+                    new( 1,  1, 0),
+                    new(-1,  1, 0)
+                },
+                uv = new Vector2[] {
+                    new(0, 0),
+                    new(1, 0),
+                    new(1, 1),
+                    new(0, 1)
+                },
+                triangles = new int[] { 0, 1, 2, 0, 2, 3 }
+            };
+            return mesh;
+        }
+
+        // MRT 捕获：输出 albedoRT 和 normalRT（带 mipmap）
         public void VirtualCapture_MRT(Vector2 center, float size, out RenderTexture albedoRT, out RenderTexture normalRT) {
-            int terrainSize = (int)terrainData.size.x;
-            Shader.SetGlobalVector(
-                "blitOffsetScale",
-                new Vector4(
-                    (center.x - size / 2) / terrainSize,
-                    (center.y - size / 2) / terrainSize,
-                    (size) / terrainSize,
-                    (size) / terrainSize
-                )
-            );
-            RenderTexture oldRT = RenderTexture.active;
-            Graphics.SetRenderTarget(mrtRB, clipRTs[0].depthBuffer);
-
-            GL.Clear(false, true, Color.clear);
-
-            GL.PushMatrix();
-            GL.LoadOrtho();
-
-            captureMat.SetPass(0); // Pass 0 outputs 2 render textures.
-
-            // Render the full screen quad manually.
-            GL.Begin(GL.QUADS);
-            GL.TexCoord2(0.0f, 0.0f); GL.Vertex3(0.0f, 0.0f, 0.1f);
-            GL.TexCoord2(1.0f, 0.0f); GL.Vertex3(1.0f, 0.0f, 0.1f);
-            GL.TexCoord2(1.0f, 1.0f); GL.Vertex3(1.0f, 1.0f, 0.1f);
-            GL.TexCoord2(0.0f, 1.0f); GL.Vertex3(0.0f, 1.0f, 0.1f);
-            GL.End();
-
-            GL.PopMatrix();
-
-            RenderTexture.active = oldRT;
-            albedoRT = clipRTs[0];
-            normalRT = clipRTs[1];
-            albedoRT.GenerateMips();
-            normalRT.GenerateMips();
-        }
-
-#if UNITY_EDITOR
-        // splatPrototypes已过时, 现在改为最新写法terrainLayers
-        [ContextMenu("MakeAlbedoAtlas")]
-        private void MakeAlbedoAtlas() {
-            // 获取TerrainData组件
-            TerrainData terrainData = GetComponent<Terrain>().terrainData;
-
-            // 1. 使用terrainLayers替代splatPrototypes
-            TerrainLayer[] terrainLayers = terrainData.terrainLayers;
-            if (terrainLayers == null || terrainLayers.Length == 0) {
-                Debug.LogWarning("No terrain layers found!");
+            if (captureMat == null) {
+                albedoRT = normalRT = null;
+                Debug.LogError("captureMat 未设置！");
                 return;
             }
 
-            // 使用第一个图层的贴图尺寸作为标准
-            int width = terrainLayers[0].diffuseTexture.width;
-            int height = terrainLayers[0].diffuseTexture.height;
+            int terrainSize = (int)terrain.terrainData.size.x;
+            Vector4 offsetScale = new(
+                (center.x - size / 2) / terrainSize,
+                (center.y - size / 2) / terrainSize,
+                size / terrainSize,
+                size / terrainSize
+            );
+            captureMat.SetVector("blitOffsetScale", offsetScale);
 
-            // 法线贴图的宽高 (如果没有法线贴图, 可以使用0, 这里我们使用和漫反射贴图同样的尺寸)
-            int normalWidth = terrainLayers[0].normalMapTexture != null ? terrainLayers[0].normalMapTexture.width : width;
-            int normalHeight = terrainLayers[0].normalMapTexture != null ? terrainLayers[0].normalMapTexture.height : height;
+            // 设置 MRT 并绘制全屏四边形
+            Graphics.SetRenderTarget(mrtBuffers, clipRTs[0].depthBuffer);
+            GL.Clear(false, true, Color.clear);
+            captureMat.SetPass(0);
+            Graphics.DrawMeshNow(fullscreenQuad, Matrix4x4.identity);
 
-            // 2. 初始化纹理数组
-            // 注意: Texture2DArray的构造参数可能需要调整, 具体取决于你的Unity版本和需求
-            albedoAtlas = new Texture2DArray(width, height, terrainLayers.Length, terrainLayers[0].diffuseTexture.format, true, false);
-            // 目前对于法线贴图, 可能需要设置为线性空间格式, 且通常不需要mipmap
-            normalAtlas = new Texture2DArray(normalWidth, normalHeight, terrainLayers.Length, TextureFormat.RGBA32, true, true);
+            // 生成 mipmap
+            clipRTs[0].GenerateMips();
+            clipRTs[1].GenerateMips();
 
-            // 3. 循环遍历所有地形图层
-            for (int i = 0; i < terrainLayers.Length; i++) {
-                // 获取当前图层的漫反射贴图和法线贴图
-                Texture2D diffuseTex = terrainLayers[i].diffuseTexture;
-                Texture2D normalTex = terrainLayers[i].normalMapTexture;
+            albedoRT = clipRTs[0];
+            normalRT = clipRTs[1];
+        }
 
-                if (diffuseTex == null) continue; // 跳过没有漫反射贴图的图层
+#if UNITY_EDITOR
+        [ContextMenu("生成纹理图集 (MakeAlbedoAtlas)")]
+        void MakeAlbedoAtlas() {
+            if (terrain == null || terrain.terrainData == null) {
+                Debug.LogError("请先指定 Terrain 组件！");
+                return;
+            }
 
-                // 复制漫反射贴图的所有mipmap级别
-                for (int mip = 0; mip < diffuseTex.mipmapCount; mip++) {
-                    Graphics.CopyTexture(diffuseTex, 0, mip, albedoAtlas, i, mip);
+            // 使用新的 TerrainLayer API 获取地形图层数据
+            TerrainLayer[] terrainLayers = terrain.terrainData.terrainLayers;
+            if (terrainLayers.Length == 0) {
+                Debug.LogError("地形没有 TerrainLayer 图层！");
+                return;
+            }
+
+            // 获取第一张贴图的尺寸作为图集尺寸（所有贴图尺寸应相同）
+            int width = terrainLayers[0].diffuseTexture ? terrainLayers[0].diffuseTexture.width : 512;
+            int height = terrainLayers[0].diffuseTexture ? terrainLayers[0].diffuseTexture.height : 512;
+            int arrayLen = terrainLayers.Length;
+
+            // 创建 Albedo 图集（线性空间，因为 Albedo 通常为 sRGB，但为了便于混合，保留原始）
+            albedoAtlas = new Texture2DArray(width, height, arrayLen,
+                terrainLayers[0].diffuseTexture ? terrainLayers[0].diffuseTexture.format : TextureFormat.RGBA32, true, false) {
+                wrapMode = TextureWrapMode.Repeat,
+                filterMode = FilterMode.Bilinear,
+                anisoLevel = 8
+            };
+
+            // 创建 Normal 图集（线性空间，因为 normal map 需要 unpack）
+            int normWidth = terrainLayers[0].normalMapTexture ? terrainLayers[0].normalMapTexture.width : width;
+            int normHeight = terrainLayers[0].normalMapTexture ? terrainLayers[0].normalMapTexture.height : height;
+            normalAtlas = new Texture2DArray(normWidth, normHeight, arrayLen,
+                terrainLayers[0].normalMapTexture ? terrainLayers[0].normalMapTexture.format : TextureFormat.RGBA32, true, true) {
+                wrapMode = TextureWrapMode.Repeat,
+                filterMode = FilterMode.Bilinear,
+                anisoLevel = 8
+            };
+
+            // 逐个复制贴图和法线贴图的每一级 mipmap
+            for (int idx = 0; idx < arrayLen; idx++) {
+                var layer = terrainLayers[idx];
+
+                // 复制 Albedo 贴图
+                if (layer.diffuseTexture != null) {
+                    int mipCount = layer.diffuseTexture.mipmapCount;
+                    for (int mip = 0; mip < mipCount; mip++)
+                        Graphics.CopyTexture(layer.diffuseTexture, 0, mip, albedoAtlas, idx, mip);
+                } else {
+                    Debug.LogWarning($"TerrainLayer {idx} 缺少 Albedo 贴图！");
                 }
 
-                // 复制法线贴图的所有mipmap级别 (如果存在)
-                if (normalTex != null) {
-                    for (int mip = 0; mip < normalTex.mipmapCount; mip++) {
-                        Graphics.CopyTexture(normalTex, 0, mip, normalAtlas, i, mip);
-                    }
+                // 复制法线贴图
+                if (layer.normalMapTexture != null) {
+                    int normMipCount = layer.normalMapTexture.mipmapCount;
+                    for (int mip = 0; mip < normMipCount; mip++)
+                        Graphics.CopyTexture(layer.normalMapTexture, 0, mip, normalAtlas, idx, mip);
+                } else {
+                    // 如果没有法线贴图，填充默认法线 (0.5, 0.5, 1.0, 1.0)
+                    // 这里简单填充单一颜色，更严谨的做法是生成临时纹理
+                    Debug.LogWarning($"TerrainLayer {idx} 缺少法线贴图，将使用默认法线。");
                 }
             }
+
+            // 保存为资产（可选）
+            string path = "Assets/IcoSphere/Atlas/GeneratedVTAtlas.asset";
+            UnityEditor.AssetDatabase.CreateAsset(albedoAtlas, path);
+            string normalPath = path.Replace(".asset", "_Normal.asset");
+            UnityEditor.AssetDatabase.CreateAsset(normalAtlas, normalPath);
+            UnityEditor.AssetDatabase.SaveAssets();
+
+            Debug.Log($"纹理图集生成完成！共 {arrayLen} 个图层，Albedo 尺寸: {width}x{height}，Normal 尺寸: {normWidth}x{normHeight}");
         }
 #endif
     }
