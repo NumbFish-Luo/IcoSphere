@@ -515,10 +515,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: caa5d21c47517724b9dee9f89720af2a, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  virtualCapture: {fileID: 1180026131}
+  idxGenerator: {fileID: 7200000, guid: 40595050afd60184aa9f0f555e31f82b, type: 3}
   rootSize: 1024
   terrainOffset: {x: 0, y: 0, z: 0}
-  indexGenerator: {fileID: 7200000, guid: 40595050afd60184aa9f0f555e31f82b, type: 3}
-  indexRT: {fileID: 0}
 --- !u!114 &1180026131
 MonoBehaviour:
   m_ObjectHideFlags: 0
