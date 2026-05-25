@@ -31,8 +31,8 @@ Shader "Custom/Rvt/Terrain" {
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             // 纹理数组
-            TEXTURE2D(_VT_IndexTex);
-            SAMPLER(sampler_VT_IndexTex);
+            TEXTURE2D(_VT_IdxTex);
+            SAMPLER(sampler_VT_IdxTex);
             TEXTURE2D_ARRAY(_VT_AlbedoTex);
             SAMPLER(sampler_VT_AlbedoTex);
             TEXTURE2D_ARRAY(_VT_NormalTex);
@@ -80,7 +80,7 @@ Shader "Custom/Rvt/Terrain" {
 
             half4 Frag(Varyings input) : SV_Target {
                 // 采样索引贴图
-                float4 indexData = SAMPLE_TEXTURE2D(_VT_IndexTex, sampler_VT_IndexTex, input.uv);
+                float4 indexData = SAMPLE_TEXTURE2D(_VT_IdxTex, sampler_VT_IdxTex, input.uv);
                 int arrayIdx = (int)indexData.r;
                 float2 offset = indexData.yz;
                 float blockSize = indexData.w;

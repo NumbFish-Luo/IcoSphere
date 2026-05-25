@@ -10,7 +10,7 @@ namespace IcoSphere {
         public Texture2DArray albedoAtlas;          // 运行时生成的 Albedo 图集
         public Texture2DArray normalAtlas;          // 运行时生成的 Normal 图集
 
-        public const int virtualTextArraySize = 512; // 与 VT_Terrain 中的尺寸保持一致
+        public const int virtualTexArrSize = 512; // 与 VT_Terrain 中的尺寸保持一致
 
         private RenderTexture[] clipRTs;
         private RenderBuffer[] mrtBuffers;
@@ -26,12 +26,12 @@ namespace IcoSphere {
                 return;
             }
 
-            mipmapCount = (int)Mathf.Log(virtualTextArraySize, 2);
+            mipmapCount = (int)Mathf.Log(virtualTexArrSize, 2);
 
             // 创建两个临时 RT，用于存储一次 MRT 绘制的 Albedo 和 Normal
             clipRTs = new RenderTexture[2];
-            clipRTs[0] = new(virtualTextArraySize, virtualTextArraySize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
-            clipRTs[1] = new(virtualTextArraySize, virtualTextArraySize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+            clipRTs[0] = new(virtualTexArrSize, virtualTexArrSize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            clipRTs[1] = new(virtualTexArrSize, virtualTexArrSize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
 
             for (int i = 0; i < clipRTs.Length; i++) {
                 clipRTs[i].useMipMap = true;
@@ -54,7 +54,7 @@ namespace IcoSphere {
             // 传递图集纹理到 Shader
             Shader.SetGlobalTexture("albedoAtlas", albedoAtlas);
             Shader.SetGlobalTexture("normalAtlas", normalAtlas);
-            Shader.SetGlobalInt("virtualTextArraySize", virtualTextArraySize);
+            Shader.SetGlobalInt("virtualTextArraySize", virtualTexArrSize);
 
             // 初始化 tileData（每个 splat 的平铺系数）
             // 使用 TerrainLayer 数组来获取地形图层信息

@@ -39,9 +39,9 @@ namespace IcoSphere {
             idxGenerator.SetTexture(kernelMain, "Result", rtIdx);
 
             // 创建纹理数组rt
-            int arraySize = 256 + 128;
-            rtArrAlbedo = new RenderTexture(VirtualCapture.virtualTextArraySize, VirtualCapture.virtualTextArraySize, 0, RenderTextureFormat.ARGB32) {
-                volumeDepth = arraySize,
+            int arrSize = 256 + 128;
+            rtArrAlbedo = new RenderTexture(VirtualCapture.virtualTexArrSize, VirtualCapture.virtualTexArrSize, 0, RenderTextureFormat.ARGB32) {
+                volumeDepth = arrSize,
                 wrapMode = TextureWrapMode.Clamp,
                 dimension = UnityEngine.Rendering.TextureDimension.Tex2DArray,
                 useMipMap = true,
@@ -49,8 +49,8 @@ namespace IcoSphere {
             };
             rtArrAlbedo.Create();
 
-            rtArrNormal = new RenderTexture(VirtualCapture.virtualTextArraySize, VirtualCapture.virtualTextArraySize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear) {
-                volumeDepth = arraySize,
+            rtArrNormal = new RenderTexture(VirtualCapture.virtualTexArrSize, VirtualCapture.virtualTexArrSize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear) {
+                volumeDepth = arrSize,
                 wrapMode = TextureWrapMode.Clamp,
                 dimension = UnityEngine.Rendering.TextureDimension.Tex2DArray,
                 useMipMap = true,
@@ -64,7 +64,7 @@ namespace IcoSphere {
             Shader.SetGlobalInt("VT_RootSize", rootSize);
             Shader.SetGlobalTexture("_VT_AlbedoTex", rtArrAlbedo);
             Shader.SetGlobalTexture("_VT_NormalTex", rtArrNormal);
-            Shader.SetGlobalTexture("_VT_IndexTex", rtIdx);
+            Shader.SetGlobalTexture("_VT_IdxTex", rtIdx);
         }
 
         private void OnDestroy() {
