@@ -514,26 +514,14 @@ namespace IcoSphere {
             return true;
         }
 
-        public bool TryGetAreaCountryColors(out Vector4[] colors) {
-            colors = null;
-            if (!EnsureInitialized() || vertBuf == null || pack.verts == null) {
-                return false;
-            }
-
-            int n = pack.verts.Length;
-            if (vertData == null || vertData.Length != n) {
-                vertData = new VertData[n];
-            }
-            vertBuf.GetData(vertData);
-
-            colors = new Vector4[n];
-            for (int i = 0; i < n; ++i) {
-                colors[i] = vertData[i].col;
-            }
-            return true;
-        }
-
         // -------- 方便外部应用的API --------
+
+        // 返回所有地块的颜色数据
+        // 一般只需要用VertData.col就行, rgb: 颜色, a: 国家id
+        public VertData[] GetAreaCountryColors() {
+            vertBuf.GetData(vertData);
+            return vertData;
+        }
 
         // 返回地块总数 (六边形/五边形数量)
         public int GetAreaCount() {

@@ -30,9 +30,11 @@ namespace IcoSphere {
                 return null;
             }
 
-            if (!icoSphere.TryGetAreaCountryColors(out Vector4[] countryColors)) {
-                Debug.LogError("CountryTextureExporter: 无法读取当前国家颜色数据");
-                return null;
+            IcoSphere.VertData[] vd = icoSphere.GetAreaCountryColors();
+            int n = vd.Length;
+            Vector4[] countryColors = new Vector4[n];
+            for (int i = 0; i < n; ++i) {
+                countryColors[i] = vd[i].col;
             }
 
             Vector3[] areaCenters = icoSphere.GetRawUnsortedAreas();
@@ -83,7 +85,9 @@ namespace IcoSphere {
                         cosLat * lonSin[x]
                     );
                     int areaId = bucketIndex.FindNearestAreaId(dir, searchRadius);
-                    pixels[y * width + x] = ToColor32(countryColors[areaId]);
+                    Color col = ToColor32(countryColors[areaId]);
+                    col.a = 1.0f; // 原本Vector4.w是国家id数据, 并不是颜色值, 所以保存为图片时需要修改为1.0f
+                    pixels[y * width + x] = col;
                 }
             }
 
