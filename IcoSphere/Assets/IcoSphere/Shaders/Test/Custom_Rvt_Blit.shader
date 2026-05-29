@@ -18,24 +18,24 @@ Shader "Custom/Rvt/Blit" {
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
 
             // 纹理数组
-            TEXTURE2D_ARRAY(albedoAtlas);
-            SAMPLER(sampler_albedoAtlas);
-            TEXTURE2D_ARRAY(normalAtlas);
-            SAMPLER(sampler_normalAtlas);
+            TEXTURE2D_ARRAY(_VT_AlbedoAtlas);
+            SAMPLER(sampler__VT_AlbedoAtlas);
+            TEXTURE2D_ARRAY(_VT_NormalAtlas);
+            SAMPLER(sampler__VT_NormalAtlas);
 
             // 地形控制贴图 (最多4张)
-            TEXTURE2D(_Control0);
-            TEXTURE2D(_Control1);
-            TEXTURE2D(_Control2);
-            TEXTURE2D(_Control3);
-            SAMPLER(sampler_Control0);
-            SAMPLER(sampler_Control1);
-            SAMPLER(sampler_Control2);
-            SAMPLER(sampler_Control3);
+            TEXTURE2D(_Ctrl0);
+            TEXTURE2D(_Ctrl1);
+            TEXTURE2D(_Ctrl2);
+            TEXTURE2D(_Ctrl3);
+            SAMPLER(sampler__Ctrl0);
+            SAMPLER(sampler__Ctrl1);
+            SAMPLER(sampler__Ctrl2);
+            SAMPLER(sampler__Ctrl3);
 
             // 参数
-            float4 blitOffsetScale; // x, y = offset, z, w = scale
-            float4 tileData[16]; // tileData[passIndex * 4 + layer] = (tilingX, tilingY, 0, 0)
+            float4 _VT_BlitOffsetScale; // x, y = offset, z, w = scale
+            float4 _VT_TileData[16]; // _VT_TileData[passIndex * 4 + layer] = (tilingX, tilingY, 0, 0)
 
             struct Attributes {
                 float4 positionOS : POSITION;
@@ -47,34 +47,33 @@ Shader "Custom/Rvt/Blit" {
                 float2 uv : TEXCOORD0;
             };
 
-            // 顶点着色器
             Varyings Vert(Attributes input) {
                 Varyings output;
                 output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
                 // 根据地块偏移和缩放重新计算 UV
-                output.uv = input.uv * blitOffsetScale.zw + blitOffsetScale.xy;
+                output.uv = input.uv * _VT_BlitOffsetScale.zw + _VT_BlitOffsetScale.xy;
                 return output;
             }
 
             // 混合辅助函数 (单张control贴图 + 4层材质)
             void SplatmapMix(int passIndex, half4 control, float2 uv, inout half4 mixedDiffuse, inout half3 mixedNormal) {
                 // 获取当前层组的4个材质的平铺系数
-                float2 tiling0 = tileData[passIndex * 4 + 0].xy;
-                float2 tiling1 = tileData[passIndex * 4 + 1].xy;
-                float2 tiling2 = tileData[passIndex * 4 + 2].xy;
-                float2 tiling3 = tileData[passIndex * 4 + 3].xy;
+                float2 tiling0 = _VT_TileData[passIndex * 4 + 0].xy;
+                float2 tiling1 = _VT_TileData[passIndex * 4 + 1].xy;
+                float2 tiling2 = _VT_TileData[passIndex * 4 + 2].xy;
+                float2 tiling3 = _VT_TileData[passIndex * 4 + 3].xy;
 
                 // 采样Albedo (使用Sample方法，自动使用mip0)
-                mixedDiffuse += control.r * albedoAtlas.Sample(sampler_albedoAtlas, float3(uv * tiling0, passIndex * 4 + 0));
-                mixedDiffuse += control.g * albedoAtlas.Sample(sampler_albedoAtlas, float3(uv * tiling1, passIndex * 4 + 1));
-                mixedDiffuse += control.b * albedoAtlas.Sample(sampler_albedoAtlas, float3(uv * tiling2, passIndex * 4 + 2));
-                mixedDiffuse += control.a * albedoAtlas.Sample(sampler_albedoAtlas, float3(uv * tiling3, passIndex * 4 + 3));
+                mixedDiffuse += control.r * _VT_AlbedoAtlas.Sample(sampler__VT_AlbedoAtlas, float3(uv * tiling0, passIndex * 4 + 0));
+                mixedDiffuse += control.g * _VT_AlbedoAtlas.Sample(sampler__VT_AlbedoAtlas, float3(uv * tiling1, passIndex * 4 + 1));
+                mixedDiffuse += control.b * _VT_AlbedoAtlas.Sample(sampler__VT_AlbedoAtlas, float3(uv * tiling2, passIndex * 4 + 2));
+                mixedDiffuse += control.a * _VT_AlbedoAtlas.Sample(sampler__VT_AlbedoAtlas, float3(uv * tiling3, passIndex * 4 + 3));
 
                 // 采样 Normal
-                half4 nrm0 = normalAtlas.Sample(sampler_normalAtlas, float3(uv * tiling0, passIndex * 4 + 0));
-                half4 nrm1 = normalAtlas.Sample(sampler_normalAtlas, float3(uv * tiling1, passIndex * 4 + 1));
-                half4 nrm2 = normalAtlas.Sample(sampler_normalAtlas, float3(uv * tiling2, passIndex * 4 + 2));
-                half4 nrm3 = normalAtlas.Sample(sampler_normalAtlas, float3(uv * tiling3, passIndex * 4 + 3));
+                half4 nrm0 = _VT_NormalAtlas.Sample(sampler__VT_NormalAtlas, float3(uv * tiling0, passIndex * 4 + 0));
+                half4 nrm1 = _VT_NormalAtlas.Sample(sampler__VT_NormalAtlas, float3(uv * tiling1, passIndex * 4 + 1));
+                half4 nrm2 = _VT_NormalAtlas.Sample(sampler__VT_NormalAtlas, float3(uv * tiling2, passIndex * 4 + 2));
+                half4 nrm3 = _VT_NormalAtlas.Sample(sampler__VT_NormalAtlas, float3(uv * tiling3, passIndex * 4 + 3));
 
                 half3 nrm = control.r * nrm0.xyz + control.g * nrm1.xyz + control.b * nrm2.xyz + control.a * nrm3.xyz;
                 mixedNormal += nrm;
@@ -90,10 +89,10 @@ Shader "Custom/Rvt/Blit" {
                 float2 uv = input.uv;
 
                 // 采样4张控制贴图（根据地形实际层数，最多16层，每4层一张控制图）
-                half4 control0 = SAMPLE_TEXTURE2D(_Control0, sampler_Control0, uv);
-                half4 control1 = SAMPLE_TEXTURE2D(_Control1, sampler_Control1, uv);
-                half4 control2 = SAMPLE_TEXTURE2D(_Control2, sampler_Control2, uv);
-                half4 control3 = SAMPLE_TEXTURE2D(_Control3, sampler_Control3, uv);
+                half4 control0 = SAMPLE_TEXTURE2D(_Ctrl0, sampler__Ctrl0, uv);
+                half4 control1 = SAMPLE_TEXTURE2D(_Ctrl1, sampler__Ctrl1, uv);
+                half4 control2 = SAMPLE_TEXTURE2D(_Ctrl2, sampler__Ctrl2, uv);
+                half4 control3 = SAMPLE_TEXTURE2D(_Ctrl3, sampler__Ctrl3, uv);
 
                 half4 mixedDiffuse = 0;
                 half3 mixedNormal   = 0;

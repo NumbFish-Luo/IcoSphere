@@ -40,7 +40,7 @@ namespace IcoSphere {
 
             // 创建纹理数组rt
             int arrSize = 256 + 128;
-            rtArrAlbedo = new RenderTexture(VirtualCapture.virtualTexArrSize, VirtualCapture.virtualTexArrSize, 0, RenderTextureFormat.ARGB32) {
+            rtArrAlbedo = new RenderTexture(VirtualCapture.vtArrSize, VirtualCapture.vtArrSize, 0, RenderTextureFormat.ARGB32) {
                 volumeDepth = arrSize,
                 wrapMode = TextureWrapMode.Clamp,
                 dimension = UnityEngine.Rendering.TextureDimension.Tex2DArray,
@@ -49,7 +49,7 @@ namespace IcoSphere {
             };
             rtArrAlbedo.Create();
 
-            rtArrNormal = new RenderTexture(VirtualCapture.virtualTexArrSize, VirtualCapture.virtualTexArrSize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear) {
+            rtArrNormal = new RenderTexture(VirtualCapture.vtArrSize, VirtualCapture.vtArrSize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear) {
                 volumeDepth = arrSize,
                 wrapMode = TextureWrapMode.Clamp,
                 dimension = UnityEngine.Rendering.TextureDimension.Tex2DArray,
@@ -61,7 +61,7 @@ namespace IcoSphere {
             // 初始化四叉树
             root = quadTreeManager.CreateRoot(rootSize, rtArrAlbedo.volumeDepth, OnLoadNodeData);
 
-            Shader.SetGlobalInt("VT_RootSize", rootSize);
+            Shader.SetGlobalInt("_VT_RootSize", rootSize);
             Shader.SetGlobalTexture("_VT_AlbedoTex", rtArrAlbedo);
             Shader.SetGlobalTexture("_VT_NormalTex", rtArrNormal);
             Shader.SetGlobalTexture("_VT_IdxTex", rtIdx);
@@ -97,7 +97,7 @@ namespace IcoSphere {
             int size = node.size;
 
             // 调用 VirtualCapture 渲染该地块的 albedo 和 normal 到临时 RT
-            virtualCapture.VirtualCapture_MRT(center, size, out RenderTexture albedoRT, out RenderTexture normalRT);
+            virtualCapture.VirtualCaptureMrt(center, size, out RenderTexture albedoRT, out RenderTexture normalRT);
 
             // 将渲染结果复制到纹理数组的对应 slice 中（同时复制 4 个 mip 级别，可根据需求调整）
             for (int i = 0; i < 4; i++) {

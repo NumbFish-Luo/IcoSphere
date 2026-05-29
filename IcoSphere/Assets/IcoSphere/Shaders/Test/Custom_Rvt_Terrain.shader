@@ -39,8 +39,8 @@ Shader "Custom/Rvt/Terrain" {
             SAMPLER(sampler_VT_NormalTex);
 
             // 全局属性
-            int VT_RootSize;
-            int virtualTextArraySize;
+            int _VT_RootSize;
+            int _VT_ArrSize;
 
             struct Attributes {
                 float4 positionOS : POSITION;
@@ -86,14 +86,14 @@ Shader "Custom/Rvt/Terrain" {
                 float blockSize = indexData.w;
 
                 // 计算地块内局部UV
-                float2 worldPos = input.uv * VT_RootSize;
+                float2 worldPos = input.uv * _VT_RootSize;
                 float2 localUV = (worldPos - offset) / blockSize;
                 localUV = saturate(localUV);
 
                 // 手动计算mipmap等级
                 float lodBias = -0.65;
-                float2 dx = ddx(worldPos * virtualTextArraySize);
-                float2 dy = ddy(worldPos * virtualTextArraySize);
+                float2 dx = ddx(worldPos * _VT_ArrSize);
+                float2 dy = ddy(worldPos * _VT_ArrSize);
                 float md = max(dot(dx, dx), dot(dy, dy));
                 float mip = clamp(0.5 * log2(md) - log2(blockSize) + lodBias, 0, 3);
 
