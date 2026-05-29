@@ -115,10 +115,10 @@ Shader "Custom/Rvt/Terrain" {
                     inputData.shadowCoord = input.shadowCoord;
                 #endif
                 inputData.fogCoord = input.fogFactor;
-                inputData.vertexLighting = half3(0, 0, 0);
-                inputData.bakedGI = 0;
-                inputData.shadowMask = 1;
-                inputData.normalizedScreenSpaceUV = 0;
+                inputData.vertexLighting = half3(0.0, 0.0, 0.0);
+                inputData.bakedGI = 0.0;
+                inputData.shadowMask = 1.0;
+                inputData.normalizedScreenSpaceUV = 0.0;
 
                 // 表面数据
                 SurfaceData surfaceData = (SurfaceData)0;
@@ -126,9 +126,9 @@ Shader "Custom/Rvt/Terrain" {
                 surfaceData.alpha = 1.0;
                 surfaceData.metallic = 0.0;
                 surfaceData.specular = 0.0;
-                surfaceData.smoothness = 0.5;
+                surfaceData.smoothness = 0.0;
                 // surfaceData.occlusion = 1.0;
-                surfaceData.emission = 0;
+                surfaceData.emission = 0.0;
                 surfaceData.normalTS = normalTS;
 
                 // 最终PBR颜色
