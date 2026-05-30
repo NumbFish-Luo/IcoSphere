@@ -34,7 +34,10 @@ Shader "Hidden/DecodeNormalMap" {
 
             TEXTURE2D(_MainTex);
             SAMPLER(sampler_MainTex);
-            float4 _MainTex_ST;
+
+            CBUFFER_START(UnityPerMaterial)
+                float4 _MainTex_ST;
+            CBUFFER_END
 
             Varyings vert(Attributes IN) {
                 Varyings OUT;

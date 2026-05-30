@@ -96,16 +96,16 @@ namespace IcoSphere {
             Vector2 center = new(node.x + node.size / 2.0f, node.z + node.size / 2.0f);
             int size = node.size;
 
-            // 调用 VirtualCapture 渲染该地块的 albedo 和 normal 到临时 RT
+            // 调用VirtualCapture渲染该地块的albedo和normal到临时rt
             virtualCapture.VirtualCaptureMrt(center, size, out RenderTexture albedoRT, out RenderTexture normalRT);
 
-            // 将渲染结果复制到纹理数组的对应 slice 中（同时复制 4 个 mip 级别，可根据需求调整）
+            // 将渲染结果复制到纹理数组的对应slice中, 同时复制4个mip级别, 可根据需求调整
             for (int i = 0; i < 4; i++) {
                 Graphics.CopyTexture(albedoRT, 0, i, rtArrAlbedo, node.phyTexIdx, i);
                 Graphics.CopyTexture(normalRT, 0, i, rtArrNormal, node.phyTexIdx, i);
             }
 
-            // 更新索引贴图（通过 Compute Shader）
+            // 通过ComputeShader更新索引贴图
             idxGenerator.SetVector("value", new Vector4(node.phyTexIdx, node.x, node.z, node.size));
             idxGenerator.SetInt("offsetX", node.x);
             idxGenerator.SetInt("offsetZ", node.z);
@@ -115,7 +115,7 @@ namespace IcoSphere {
         }
 
 #if UNITY_EDITOR
-        // 辅助：在 Scene 视图中绘制四叉树节点（调试用）
+        // 在Scene视图中绘制四叉树节点, 调试用
         void OnDrawGizmos() {
             if (root == null) {
                 return;
