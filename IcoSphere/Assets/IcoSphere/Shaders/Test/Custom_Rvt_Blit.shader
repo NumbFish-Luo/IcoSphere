@@ -70,12 +70,13 @@ Shader "Custom/Rvt/Blit" {
                 mixedDiffuse += ctrl.a * _VT_AlbedoAtlas.Sample(sampler__VT_AlbedoAtlas, float3(uv * tiling3, passIdx * 4 + 3));
 
                 // 采样Normal
-                half4 nrm0 = _VT_NormalAtlas.Sample(sampler__VT_NormalAtlas, float3(uv * tiling0, passIdx * 4 + 0));
-                half4 nrm1 = _VT_NormalAtlas.Sample(sampler__VT_NormalAtlas, float3(uv * tiling1, passIdx * 4 + 1));
-                half4 nrm2 = _VT_NormalAtlas.Sample(sampler__VT_NormalAtlas, float3(uv * tiling2, passIdx * 4 + 2));
-                half4 nrm3 = _VT_NormalAtlas.Sample(sampler__VT_NormalAtlas, float3(uv * tiling3, passIdx * 4 + 3));
+                const half scale = 1.5;
+                half3 nrm0 = UnpackNormalScale(_VT_NormalAtlas.Sample(sampler__VT_NormalAtlas, float3(uv * tiling0, passIdx * 4 + 0)), scale);
+                half3 nrm1 = UnpackNormalScale(_VT_NormalAtlas.Sample(sampler__VT_NormalAtlas, float3(uv * tiling1, passIdx * 4 + 1)), scale);
+                half3 nrm2 = UnpackNormalScale(_VT_NormalAtlas.Sample(sampler__VT_NormalAtlas, float3(uv * tiling2, passIdx * 4 + 2)), scale);
+                half3 nrm3 = UnpackNormalScale(_VT_NormalAtlas.Sample(sampler__VT_NormalAtlas, float3(uv * tiling3, passIdx * 4 + 3)), scale);
 
-                half3 nrm = ctrl.r * nrm0.xyz + ctrl.g * nrm1.xyz + ctrl.b * nrm2.xyz + ctrl.a * nrm3.xyz;
+                half3 nrm = ctrl.r * nrm0 + ctrl.g * nrm1 + ctrl.b * nrm2 + ctrl.a * nrm3;
                 mixedNormal += nrm;
             }
 
@@ -122,9 +123,6 @@ Shader "Custom/Rvt/Blit" {
                 totalWeight = max(totalWeight, 0.001);
                 mixedDiffuse /= totalWeight;
                 mixedNormal /= totalWeight;
-
-                // 将法线从[0, 1]范围转换回[-1, 1], 因为存储时做了 * 0.5 + 0.5
-                // mixedNormal = mixedNormal * 2.0 - 1.0;
 
                 FragOutput output;
                 output.col0 = half4(mixedDiffuse.rgb, 1.0);

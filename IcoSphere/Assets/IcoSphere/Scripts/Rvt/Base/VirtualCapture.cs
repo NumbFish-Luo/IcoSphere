@@ -1,15 +1,20 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.IO;
+using UnityEditor;
 using UnityEngine;
 
 namespace IcoSphere {
     [RequireComponent(typeof(Rvt))]
     public class VirtualCapture : MonoBehaviour {
-        public Terrain terrain;
-        public Material blitMat;
-        public Texture2DArray albedoAtlas;
-        public Texture2DArray normalAtlas;
+        [SerializeField] private Terrain terrain;
+        [SerializeField] private Material blitMat;
+        [SerializeField] private Shader decodeNormal;
+        [SerializeField] private Texture2DArray albedoAtlas;
+        [SerializeField] private Texture2DArray normalAtlas;
+
         public const int vtArrSize = 512;
+
         private RenderTexture[] clipRTs;
         private RenderBuffer[] mrtBufs;
 
@@ -50,7 +55,9 @@ namespace IcoSphere {
                 tileData[i] = new Vector4(
                     x / terrainLayers[i].tileSize.x,
                     z / terrainLayers[i].tileSize.y,
-                    0, 0);
+                    0,
+                    0
+                );
             }
             Shader.SetGlobalVectorArray("_VT_TileData", tileData);
         }
@@ -110,21 +117,25 @@ namespace IcoSphere {
         [ContextMenu("生成纹理图集")]
         void MakeAlbedoAtlas() {
             TerrainLayer[] terrainLayers = terrain.terrainData.terrainLayers;
-            int w = terrainLayers[0].diffuseTexture ? terrainLayers[0].diffuseTexture.width : 512;
-            int h = terrainLayers[0].diffuseTexture ? terrainLayers[0].diffuseTexture.height : 512;
             int n = terrainLayers.Length;
 
             // 创建Albedo图集, 线性空间, 因为Albedo通常为sRGB, 但为了便于混合, 保留原始
-            albedoAtlas = new Texture2DArray(w, h, n, terrainLayers[0].diffuseTexture ? terrainLayers[0].diffuseTexture.format : TextureFormat.RGBA32, true, false) {
+            Texture2D diffuseTex0 = terrainLayers[0].diffuseTexture;
+            int w = diffuseTex0 ? diffuseTex0.width : 512;
+            int h = diffuseTex0 ? diffuseTex0.height : 512;
+            TextureFormat f = diffuseTex0 ? diffuseTex0.format : TextureFormat.RGBA32;
+            albedoAtlas = new(w, h, n, f, true, false) {
                 wrapMode = TextureWrapMode.Repeat,
                 filterMode = FilterMode.Bilinear,
                 anisoLevel = 8
             };
 
             // 创建Normal图集, 线性空间, normal需要unpack
-            int wn = terrainLayers[0].normalMapTexture ? terrainLayers[0].normalMapTexture.width : w;
-            int hn = terrainLayers[0].normalMapTexture ? terrainLayers[0].normalMapTexture.height : h;
-            normalAtlas = new Texture2DArray(wn, hn, n, terrainLayers[0].normalMapTexture ? terrainLayers[0].normalMapTexture.format : TextureFormat.RGBA32, true, true) {
+            Texture2D normalMapTex0 = terrainLayers[0].normalMapTexture; 
+            int wn = normalMapTex0 ? normalMapTex0.width : w;
+            int hn = normalMapTex0 ? normalMapTex0.height : h;
+            TextureFormat fn = normalMapTex0 ? normalMapTex0.format : TextureFormat.RGBA32;
+            normalAtlas = new(wn, hn, n, fn, true, true) {
                 wrapMode = TextureWrapMode.Repeat,
                 filterMode = FilterMode.Bilinear,
                 anisoLevel = 8
@@ -137,21 +148,21 @@ namespace IcoSphere {
                 // 复制Albedo
                 if (layer.diffuseTexture != null) {
                     int mipCount = layer.diffuseTexture.mipmapCount;
-                    for (int mip = 0; mip < mipCount; ++mip)
+                    for (int mip = 0; mip < mipCount; ++mip) {
                         Graphics.CopyTexture(layer.diffuseTexture, 0, mip, albedoAtlas, i, mip);
+                    }
                 } else {
-                    Debug.LogWarning($"TerrainLayer {i} 缺少 Albedo 贴图！");
+                    Debug.LogWarning($"TerrainLayer {i} 缺少Albedo贴图!");
                 }
 
                 // 复制法线贴图
                 if (layer.normalMapTexture != null) {
                     int normMipCount = layer.normalMapTexture.mipmapCount;
-                    for (int mip = 0; mip < normMipCount; mip++)
+                    for (int mip = 0; mip < normMipCount; ++mip) {
                         Graphics.CopyTexture(layer.normalMapTexture, 0, mip, normalAtlas, i, mip);
+                    }
                 } else {
-                    // 如果没有法线贴图，填充默认法线 (0.5, 0.5, 1.0, 1.0)
-                    // 这里简单填充单一颜色，更严谨的做法是生成临时纹理
-                    Debug.LogWarning($"TerrainLayer {i} 缺少法线贴图，将使用默认法线。");
+                    Debug.LogWarning($"TerrainLayer {i} 缺少法线贴图!");
                 }
             }
 
@@ -159,13 +170,38 @@ namespace IcoSphere {
             bool testSave = true;
             if (testSave) {
                 string path = "Assets/IcoSphere/Atlas/GeneratedVTAtlas.asset";
-                UnityEditor.AssetDatabase.CreateAsset(albedoAtlas, path);
+                AssetDatabase.CreateAsset(albedoAtlas, path);
                 string normalPath = path.Replace(".asset", "_Normal.asset");
-                UnityEditor.AssetDatabase.CreateAsset(normalAtlas, normalPath);
-                UnityEditor.AssetDatabase.SaveAssets();
+                AssetDatabase.CreateAsset(normalAtlas, normalPath);
+                AssetDatabase.SaveAssets();
             }
 
             Debug.Log($"纹理图集生成完成！共 {n} 个图层，Albedo 尺寸: {w}x{h}，Normal 尺寸: {wn}x{hn}");
+        }
+
+        public static bool SaveDecodedNormalMap(Texture2D src, string savePath, Shader decodeNormal) {
+            RenderTexture tmpRT = RenderTexture.GetTemporary(src.width, src.height, 0, RenderTextureFormat.ARGB32);
+            Material decodeMat = new(decodeNormal);
+
+            // 这一步会完成DXT5nm -> 标准法线的转换
+            Graphics.Blit(src, tmpRT, decodeMat);
+
+            RenderTexture.active = tmpRT;
+            Texture2D resultTex = new(src.width, src.height, TextureFormat.RGBA32, false);
+            resultTex.ReadPixels(new Rect(0, 0, tmpRT.width, tmpRT.height), 0, 0);
+            resultTex.Apply();
+
+            RenderTexture.active = null;
+            RenderTexture.ReleaseTemporary(tmpRT);
+            Destroy(decodeMat);
+
+            byte[] pngData = resultTex.EncodeToPNG();
+
+            File.WriteAllBytes(savePath, pngData);
+            Destroy(resultTex);
+
+            Debug.Log($"标准法线贴图已保存至：{savePath}");
+            return true;
         }
 #endif
     }

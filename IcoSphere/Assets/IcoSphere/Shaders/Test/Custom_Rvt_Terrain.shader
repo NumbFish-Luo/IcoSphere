@@ -100,7 +100,6 @@ Shader "Custom/Rvt/Terrain" {
                 // 采样Albedo和Normal
                 float3 albedo = _VT_AlbedoTex.SampleLevel(sampler_VT_AlbedoTex, float3(localUV, arrayIdx), mip).rgb;
                 float3 normalTS = _VT_NormalTex.SampleLevel(sampler_VT_NormalTex, float3(localUV, arrayIdx), mip).rgb;
-                normalTS = normalTS * 2.0 - 1.0;
 
                 // 切线空间法线 -> 世界空间
                 float3 normalWS = TransformTangentToWorld(normalTS, half3x3(input.tangentWS.xyz, GetObjectToWorldMatrix()._m01_m11_m21, input.normalWS));
@@ -125,9 +124,8 @@ Shader "Custom/Rvt/Terrain" {
                 surfaceData.albedo = albedo;
                 surfaceData.alpha = 1.0;
                 surfaceData.metallic = 0.0;
-                surfaceData.specular = 0.0;
-                surfaceData.smoothness = 0.0;
-                // surfaceData.occlusion = 1.0;
+                surfaceData.smoothness = 0.3;
+                surfaceData.occlusion = 1.0;
                 surfaceData.emission = 0.0;
                 surfaceData.normalTS = normalTS;
 
@@ -136,6 +134,9 @@ Shader "Custom/Rvt/Terrain" {
 
                 // 雾效
                 color.rgb = MixFog(color.rgb, input.fogFactor);
+
+                // return half4(localUV.xy, 0.0, 1.0);
+
                 return color;
             }
             ENDHLSL
