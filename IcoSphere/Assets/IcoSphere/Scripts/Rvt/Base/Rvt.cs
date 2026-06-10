@@ -81,9 +81,10 @@ namespace IcoSphere {
 
         private void Update() {
             Profiler.BeginSample("updateAllLeavesState");
+            Vector3 p = Camera.main.transform.position;
             Vector2 camPos = new(
-                Camera.main.transform.position.x - terrainOffset.x,
-                Camera.main.transform.position.z - terrainOffset.z
+                p.x - terrainOffset.x,
+                p.z - terrainOffset.z
             );
             quadTreeManager.UpdateNodesState(camPos);
             Profiler.EndSample();
@@ -116,7 +117,7 @@ namespace IcoSphere {
 
 #if UNITY_EDITOR
         // 在Scene视图中绘制四叉树节点, 调试用
-        void OnDrawGizmos() {
+        private void OnDrawGizmos() {
             if (root == null) {
                 return;
             }

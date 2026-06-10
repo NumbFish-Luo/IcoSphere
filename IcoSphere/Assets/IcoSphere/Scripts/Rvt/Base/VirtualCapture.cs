@@ -173,6 +173,7 @@ namespace IcoSphere {
                 AssetDatabase.CreateAsset(albedoAtlas, path);
                 string normalPath = path.Replace(".asset", "_Normal.asset");
                 AssetDatabase.CreateAsset(normalAtlas, normalPath);
+                SaveHeightMap(terrain, "Assets/IcoSphere/Atlas/Heightmap.png");
                 AssetDatabase.SaveAssets();
             }
 
@@ -202,6 +203,18 @@ namespace IcoSphere {
 
             Debug.Log($"标准法线贴图已保存至：{savePath}");
             return true;
+        }
+
+        public static void SaveHeightMap(Terrain terrain, string savePath) {
+            RenderTexture heightMap = terrain.terrainData.heightmapTexture;
+            RenderTexture.active = heightMap;
+            Texture2D resultTex = new(heightMap.width, heightMap.height, TextureFormat.RGBA32, false);
+            resultTex.ReadPixels(new Rect(0, 0, heightMap.width, heightMap.height), 0, 0);
+            resultTex.Apply();
+            RenderTexture.active = null;
+            byte[] pngData = resultTex.EncodeToPNG();
+            File.WriteAllBytes(savePath, pngData);
+            Debug.Log($"高度贴图已保存至：{savePath}");
         }
 #endif
     }
