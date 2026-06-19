@@ -209,8 +209,8 @@ namespace IcoSphere {
         }
 
         // 根据视点计算节点需要的世界空间边长, lod
-        // 逻辑：需要的边长 = 节点中心到相机的距离 * (屏幕像素误差阈值) / 焦距
-        // 简化版：需要的边长 = 距离 * 常量系数，使得距离越远需要的边长越大（细节越低）
+        // 逻辑: 需要的边长 = 节点中心到相机的距离 * (屏幕像素误差阈值) / 焦距
+        // 简化版: 需要的边长 = 距离 * 常量系数, 使得距离越远需要的边长越大, 细节越低
         private float ComputeNeededWorldSize(Vector3 cameraPos, CubemapQuadTree node) {
             Vector3 worldCenter = mapper.GetNodeWorldCenter(node);
             float distance = Vector3.Distance(cameraPos, worldCenter);
