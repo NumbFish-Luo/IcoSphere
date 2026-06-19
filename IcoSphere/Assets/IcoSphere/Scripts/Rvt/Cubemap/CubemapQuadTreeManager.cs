@@ -9,7 +9,7 @@ namespace IcoSphere {
         // 每个面独立维护节点队列, 数组长度固定为6
         private readonly Queue<CubemapQuadTree>[] nowNodes; // 当前帧叶子节点
         private readonly Queue<CubemapQuadTree>[] nextNodes; // 下一帧叶子节点
-        private CubemapQuadTree[] roots = new CubemapQuadTree[6]; // 长度6，存储每个面的根节点
+        private readonly CubemapQuadTree[] roots = new CubemapQuadTree[6]; // 长度6，存储每个面的根节点
 
         // 6面共享资源
         private readonly Queue<int> freePhyTexIdxes; // 可用物理纹理索引池
