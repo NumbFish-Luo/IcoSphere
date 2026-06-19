@@ -12,14 +12,12 @@ namespace IcoSphere {
         public bool showAllFaces = false; // 勾选则显示所有面, 忽略selectedFace
 
         private CubemapQuadTreeManager quadTreeManager;
-        private CubemapToWorldMapper mapper;
 
         private void Awake() {
-            mapper = new CubemapToWorldMapper(planetRadius, rootTextureSize);
             quadTreeManager = new CubemapQuadTreeManager(
                 rootTextureSize,
+                planetRadius,
                 textureArrayCapacity,
-                mapper,
                 OnLoadNodeData
             );
         }

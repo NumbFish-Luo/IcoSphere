@@ -8,9 +8,11 @@ namespace IcoSphere {
         private readonly float cubeHalfSize; // 立方体半边长 = radius / sqrt(3), 用于归一化
         private readonly float rootWorldSize; // 缓存根节点的世界尺寸
 
-        public CubemapToWorldMapper(float radius, int rootSize) {
-            sphereRadius = radius;
+        public float GetRadius() => sphereRadius;
+
+        public CubemapToWorldMapper(int rootSize, float radius) {
             this.rootSize = rootSize;
+            sphereRadius = radius;
             cubeHalfSize = radius / Mathf.Sqrt(3f); // 使立方体顶点恰在球面上
             rootWorldSize = ComputeWorldSizeForRoot(); // 预计算根节点的世界尺寸, 所有面相同
         }
@@ -77,6 +79,19 @@ namespace IcoSphere {
                 _ => Vector3.zero,
             };
             return pos;
+        }
+
+        // 根据面索引获取世界空间法线方向, 单位向量
+        public Vector3 GetFaceNormal(CubemapFace face) {
+            return face switch {
+                CubemapFace.R => Vector3.right,
+                CubemapFace.L => Vector3.left,
+                CubemapFace.U => Vector3.up,
+                CubemapFace.D => Vector3.down,
+                CubemapFace.F => Vector3.forward,
+                CubemapFace.B => Vector3.back,
+                _ => Vector3.zero,
+            };
         }
     }
 }
