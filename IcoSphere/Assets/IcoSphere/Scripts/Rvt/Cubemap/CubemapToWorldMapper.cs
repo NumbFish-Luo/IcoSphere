@@ -68,8 +68,35 @@ namespace IcoSphere {
         }
 
         // 根据面索引和标准化UV坐标 (-1~1) 获取立方体局部坐标 (未归一化)
+        // 3D图示 (可惜有点难标记所有面的uv方向):
+        //            F
+        //      -----^----    Y
+        //     /    /    /|   ^ Z
+        //    /    U ---> |   |/
+        //   |---------|  |   ---> X
+        // L |         |R /
+        //   <--- B    | /
+        //   |    |    |/
+        //   -----v-----
+        //        D
+        // 为什么侧面uv的都是-Y方向? 因为这是DirectX约定的立方体贴图坐标系: https://learn.microsoft.com/en-us/windows/win32/direct3d9/cubic-environment-mapping
+        // 以F面为中心展开图示 (我其实习惯以B面展开, 但是以F面展开更符合DirectX官方文档图示的效果)
+        //           -----------
+        //           |         |
+        //           |    U --->
+        //           |    |    |
+        // ---------------v-------------------------
+        // |         |         |         |         |
+        // |    L --->    F --->    R --->    B --->
+        // |    |    |    |    |    |    |    |    |
+        // -----v---------v---------v---------v-----
+        //           |         |
+        //           |    D --->
+        //           |    |    |
+        //           -----v-----
+        // 可以明显看到，以F面为中心展开的话，uv坐标系都保持了统一
         private Vector3 GetLocalPosFromUV(CubemapFace face, float u, float v) {
-            var pos = face switch {
+            return face switch {
                 CubemapFace.R => new Vector3( 1 * cubeHalfSize, -v * cubeHalfSize, -u * cubeHalfSize),
                 CubemapFace.L => new Vector3(-1 * cubeHalfSize, -v * cubeHalfSize,  u * cubeHalfSize),
                 CubemapFace.U => new Vector3( u * cubeHalfSize,  1 * cubeHalfSize,  v * cubeHalfSize),
@@ -78,7 +105,6 @@ namespace IcoSphere {
                 CubemapFace.B => new Vector3(-u * cubeHalfSize, -v * cubeHalfSize, -1 * cubeHalfSize),
                 _ => Vector3.zero,
             };
-            return pos;
         }
 
         // 根据面索引获取世界空间法线方向, 单位向量

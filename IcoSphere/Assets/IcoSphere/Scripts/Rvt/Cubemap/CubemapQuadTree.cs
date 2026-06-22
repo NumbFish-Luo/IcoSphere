@@ -1,6 +1,7 @@
 namespace IcoSphere {
     // 立方体六面四叉树节点, 记录面索引及其在面上的uv坐标
     // uv是像素坐标, 范围[0, rootSize]
+    // 也就是对于单个面, uv坐标原点在左下角(0, 0), 右上角为(rootSize, rootSize)
     public class CubemapQuadTree {
         // ---- 基础属性 ----
         public CubemapFace face;
@@ -34,6 +35,12 @@ namespace IcoSphere {
         public bool IsLeaf => children == null;
 
         // 细分出指定子节点, childIdx: 0~3
+        // 假设原节点(u, v, size) = (0, 0, 2048)
+        // 细分后的4个子节点则分别是
+        // (   0,    0, 1024)
+        // (1024,    0, 1024)
+        // (   0, 1024, 1024)
+        // (1024, 1024, 1024)
         public CubemapQuadTree Split(int childIdx, int phyTexIdx) {
             int half = size / 2;
             int childU = u + (childIdx % 2) * half;

@@ -15,15 +15,14 @@ namespace IcoSphere {
         private readonly Queue<int> freePhyTexIdxes; // 可用物理纹理索引池
         private readonly UnityAction<CubemapQuadTree> onLoadData; // 节点纹理加载回调
 
-        // lod控制参数
-        private const int MAX_SPLIT_PER_FRAME = 2; // 每帧最多细分次数, 总6个面
-        private int totalSplitThisFrame; // 本帧已细分总次数
-
         // 坐标转换器
         private readonly CubemapToWorldMapper mapper;
 
+        // lod控制参数
+        private const int MAX_SPLIT_PER_FRAME = 2; // 每帧最多细分次数, 总6个面
+
         // lod系数, 系数越小越精细, 更远距离才降低细节, 例如当距离 = 1000时, 需要边长 ≈ 1000 * LOD_FACTOR, 节点原始边长若为大于此值就需要细分
-        const float LOD_FACTOR = 0.25f;
+        private const float LOD_FACTOR = 0.25f;
 
         // 初始化
         public CubemapQuadTreeManager(int rootSize, float planetRadius, int texArrCapacity, UnityAction<CubemapQuadTree> onLoadData) {
@@ -56,7 +55,7 @@ namespace IcoSphere {
 
         // 每帧更新所有面的lod
         public void UpdateAllFaces(Vector3 camPos) {
-            totalSplitThisFrame = 0;
+            int totalSplitThisFrame = 0; // 本帧已细分总次数
 
             Vector3 sphereCenter = Vector3.zero;
             float camDist = (camPos - sphereCenter).magnitude; // 相机到球心的距离
@@ -79,7 +78,7 @@ namespace IcoSphere {
                 }
 
                 // 执行正常的 LOD 更新
-                UpdateFace(face, camPos);
+                UpdateFace(face, camPos, ref totalSplitThisFrame);
             }
 
             // 交换队列, 无gc
@@ -89,7 +88,7 @@ namespace IcoSphere {
         }
 
         // 更新单个面
-        private void UpdateFace(int face, Vector3 camPos) {
+        private void UpdateFace(int face, Vector3 camPos, ref int totalSplitThisFrame) {
             nextNodes[face].Clear();
 
             while (nowNodes[face].Count > 0) {
@@ -129,7 +128,7 @@ namespace IcoSphere {
                     // 需要进一步细分
                     if (totalSplitThisFrame < MAX_SPLIT_PER_FRAME && freePhyTexIdxes.Count >= 4) {
                         Split(node, nextNodes[face]);
-                        totalSplitThisFrame++;
+                        ++totalSplitThisFrame;
                     } else {
                         nextNodes[face].Enqueue(node);
                     }
@@ -244,7 +243,7 @@ namespace IcoSphere {
                     Vector3 center = mapper.GetNodeWorldCenter(node);
                     Vector3 size3D = mapper.GetNodeWorldSize3D(node);
                     Gizmos.DrawWireCube(center, size3D);
-                    UnityEditor.Handles.Label(center, $"{node.phyTexIdx}\n{node.size}");
+                    UnityEditor.Handles.Label(center, $"{(CubemapFace)f}\n{node.phyTexIdx}\n{node.size}");
                 }
             }
         }
