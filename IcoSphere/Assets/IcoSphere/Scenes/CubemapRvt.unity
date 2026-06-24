@@ -133,12 +133,12 @@ GameObject:
   - component: {fileID: 136160329}
   - component: {fileID: 136160330}
   m_Layer: 0
-  m_Name: CubemapQuadTreeTest
+  m_Name: QuadTreeTest
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &136160329
 Transform:
   m_ObjectHideFlags: 0
@@ -166,9 +166,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 41eaa6421601aa2419f9e1ba3a0db62d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  planetRadius: 1000
-  rootTextureSize: 1024
-  textureArrayCapacity: 512
+  cam: {fileID: 159090836}
+  radius: 1000
+  rootSize: 1024
+  texArrCapacity: 512
   selectedFace: 0
   showAllFaces: 1
 --- !u!1 &159090834
@@ -406,7 +407,7 @@ Transform:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 768583278}
   serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalRotation: {x: -0, y: -0, z: -0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 2000, y: 2000, z: 2000}
   m_ConstrainProportionsScale: 1
@@ -429,7 +430,7 @@ GameObject:
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
-  m_IsActive: 1
+  m_IsActive: 0
 --- !u!4 &879054150
 Transform:
   m_ObjectHideFlags: 0
@@ -455,6 +456,70 @@ MonoBehaviour:
   m_Enabled: 1
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: 88ee4048530c87441ade229033e8e4de, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+--- !u!1 &979437398
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 979437399}
+  - component: {fileID: 979437400}
+  - component: {fileID: 979437401}
+  m_Layer: 0
+  m_Name: Rvt
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &979437399
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 979437398}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 0, y: 0, z: 0}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &979437400
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 979437398}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: c492fddb1a20c7a49a730c35fc71c422, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  cam: {fileID: 159090836}
+  virtualCapture: {fileID: 979437401}
+  radius: 1000
+  rootSize: 1024
+  texArrCapacity: 512
+  selectedFace: 0
+  showAllFaces: 1
+--- !u!114 &979437401
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 979437398}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 796fab2f128f60141aa6e37fd0dfff41, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
 --- !u!1 &1099801326
@@ -585,7 +650,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1211558838}
   m_Layer: 0
-  m_Name: ---- CubemapRvtTest ----
+  m_Name: ---- RvtTest ----
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -616,7 +681,7 @@ GameObject:
   m_Component:
   - component: {fileID: 1565025753}
   m_Layer: 0
-  m_Name: ---- CubemapQuadTreeTest ----
+  m_Name: ---- QuadTreeTest ----
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -675,8 +740,9 @@ SceneRoots:
   m_Roots:
   - {fileID: 1751062439}
   - {fileID: 1099801328}
+  - {fileID: 768583282}
   - {fileID: 1565025753}
   - {fileID: 136160329}
-  - {fileID: 768583282}
   - {fileID: 1211558838}
   - {fileID: 879054150}
+  - {fileID: 979437399}

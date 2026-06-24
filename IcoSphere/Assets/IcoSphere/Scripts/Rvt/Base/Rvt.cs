@@ -26,7 +26,7 @@ namespace IcoSphere {
         // ---- Compute Shader ----
         private int kernelMain;
 
-        private void Start() {
+        private void Awake() {
             // 创建索引贴图, 并传入给Compute Shader
             rtIdx = new RenderTexture(rootSize, rootSize, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear) {
                 useMipMap = false,

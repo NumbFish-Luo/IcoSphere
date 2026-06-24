@@ -3,28 +3,28 @@ using UnityEngine;
 namespace IcoSphere {
     public class CubemapQuadTreeTest : MonoBehaviour {
         [Header("Planet Settings")]
-        public float planetRadius = 1000f;
-        public int rootTextureSize = 1024;
-        public int textureArrayCapacity = 512;
+        [SerializeField] private Camera cam;
+        [SerializeField] private float radius = 1000.0f;
+        [SerializeField] private int rootSize = 1024;
+        [SerializeField] private int texArrCapacity = 512;
 
         [Header("Debug Visualization")]
-        public CubemapFace selectedFace = CubemapFace.R; // 选择要显示的面
-        public bool showAllFaces = false; // 勾选则显示所有面, 忽略selectedFace
+        [SerializeField] private CubemapFace selectedFace = CubemapFace.R; // 选择要显示的面
+        [SerializeField] private bool showAllFaces = true; // 勾选则显示所有面, 忽略selectedFace
 
-        private CubemapQuadTreeManager quadTreeManager;
+        private CubemapQuadTreeManager quadTreeManager = null;
 
         private void Awake() {
             quadTreeManager = new CubemapQuadTreeManager(
-                rootTextureSize,
-                planetRadius,
-                textureArrayCapacity,
+                rootSize,
+                radius,
+                texArrCapacity,
                 OnLoadNodeData
             );
         }
 
         private void Update() {
-            Vector3 cameraPos = Camera.main.transform.position;
-            quadTreeManager.UpdateAllFaces(cameraPos);
+            quadTreeManager.UpdateAllFaces(cam.transform.position);
         }
 
         private void OnLoadNodeData(CubemapQuadTree node) {
