@@ -13,16 +13,14 @@ namespace IcoSphere {
         [SerializeField] private Texture2DArray albedoAtlas;
         [SerializeField] private Texture2DArray normalAtlas;
 
-        public const int vtArrSize = 512;
-
         private RenderTexture[] clipRTs;
         private RenderBuffer[] mrtBufs;
 
-        void Awake() {
+        public void Init(int vtTexSize) {
             // 创建两个临时rt, 用于存储一次mrt绘制的Albedo和Normal
             clipRTs = new RenderTexture[2];
-            clipRTs[0] = new(vtArrSize, vtArrSize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
-            clipRTs[1] = new(vtArrSize, vtArrSize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+            clipRTs[0] = new(vtTexSize, vtTexSize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
+            clipRTs[1] = new(vtTexSize, vtTexSize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
             for (int i = 0; i < clipRTs.Length; ++i) {
                 clipRTs[i].useMipMap = true;
                 clipRTs[i].autoGenerateMips = false;
@@ -43,7 +41,7 @@ namespace IcoSphere {
             // 传递图集纹理到Shader
             Shader.SetGlobalTexture("_VT_AlbedoAtlas", albedoAtlas);
             Shader.SetGlobalTexture("_VT_NormalAtlas", normalAtlas);
-            Shader.SetGlobalInt("_VT_ArrSize", vtArrSize);
+            Shader.SetGlobalInt("_VT_TexSize", vtTexSize);
 
             // 初始化tileData (每个splat的平铺系数)
             // 使用TerrainLayer数组来获取地形图层信息
@@ -62,7 +60,7 @@ namespace IcoSphere {
             Shader.SetGlobalVectorArray("_VT_TileData", tileData);
         }
 
-        void OnDestroy() {
+        private void OnDestroy() {
             if (clipRTs != null) {
                 foreach (RenderTexture rt in clipRTs) {
                     if (rt != null) {
@@ -115,7 +113,7 @@ namespace IcoSphere {
 
 #if UNITY_EDITOR
         [ContextMenu("生成纹理图集")]
-        void MakeAlbedoAtlas() {
+        private void MakeAlbedoAtlas() {
             TerrainLayer[] terrainLayers = terrain.terrainData.terrainLayers;
             int n = terrainLayers.Length;
 

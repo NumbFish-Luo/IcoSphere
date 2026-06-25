@@ -10,32 +10,41 @@ namespace IcoSphere {
 
         // ---- 可调参数 ----
         [SerializeField] private float radius = 1000.0f;
-        [SerializeField] private int rootSize = 1024;
-        [SerializeField] private int texArrCapacity = 512;
+        [SerializeField] private int rootTexSize = 1024;
+        [SerializeField] private int vtArrCapacity = 512;
 
         // ---- Debug ----
         [Header("Debug")]
-        [SerializeField] private CubemapFace selectedFace = CubemapFace.R; // 选择要显示的面
         [SerializeField] private bool showAllFaces = true; // 勾选则显示所有面, 忽略selectedFace
+        [SerializeField] private CubemapFace selectedFace = CubemapFace.R; // 选择要显示的面
 
         // ---- 四叉树 ----
-        private CubemapQuadTree root = null;
         private CubemapQuadTreeManager quadTreeManager = null;
 
-        // ---- RT ----
-        // ...
+        // ---- 6面带多层切片的RT ----
+        private RenderTexture[] rtArrAlbedoAllFaces = new RenderTexture[6];
 
         // ---- Compute Shader ----
         // ....
 
         // ---- Unity生命周期函数 ----
         private void Awake() {
-            quadTreeManager = new CubemapQuadTreeManager(
-                rootSize,
-                radius,
-                texArrCapacity,
-                OnLoadNodeData
-            );
+            quadTreeManager = new(rootTexSize, radius, vtArrCapacity, OnLoadNodeData);
+
+            int vtTexSize = rootTexSize / 2;
+            virtualCapture.Init(vtTexSize);
+
+            for (int face = 0; face < 6; ++face) {
+                RenderTexture rtArrAlbedoOneFace = new(vtTexSize, vtTexSize, 0, RenderTextureFormat.ARGB32) {
+                    volumeDepth = vtArrCapacity,
+                    wrapMode = TextureWrapMode.Clamp,
+                    dimension = UnityEngine.Rendering.TextureDimension.Tex2DArray,
+                    useMipMap = true,
+                    autoGenerateMips = false
+                };
+                rtArrAlbedoOneFace.Create();
+                rtArrAlbedoAllFaces[face] = rtArrAlbedoOneFace;
+            }
         }
 
         private void Update() {

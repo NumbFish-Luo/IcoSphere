@@ -3,16 +3,16 @@ using UnityEngine;
 namespace IcoSphere {
     // 负责立方体面UV坐标 <--> 世界空间三维坐标的转换
     public class CubemapToWorldMapper {
-        private readonly float sphereRadius; // 球体半径
-        private readonly int rootSize; // 根节点纹理分辨率, 如1024
+        private readonly float radius; // 球体半径
+        private readonly int rootTexSize; // 根节点纹理分辨率, 如1024
         private readonly float cubeHalfSize; // 立方体半边长 = radius / sqrt(3), 用于归一化
         private readonly float rootWorldSize; // 缓存根节点的世界尺寸
 
-        public float GetRadius() => sphereRadius;
+        public float GetRadius() => radius;
 
-        public CubemapToWorldMapper(int rootSize, float radius) {
-            this.rootSize = rootSize;
-            sphereRadius = radius;
+        public CubemapToWorldMapper(int rootTexSize, float radius) {
+            this.rootTexSize = rootTexSize;
+            this.radius = radius;
             cubeHalfSize = radius / Mathf.Sqrt(3f); // 使立方体顶点恰在球面上
             rootWorldSize = ComputeWorldSizeForRoot(); // 预计算根节点的世界尺寸, 所有面相同
         }
@@ -20,22 +20,22 @@ namespace IcoSphere {
         // 获取球面上节点中心的世界坐标
         public Vector3 GetNodeWorldCenter(CubemapQuadTree node) {
             // 面内UV坐标 (范围0~rootSize) 转标准化坐标 (-1~1)
-            float u_norm = (node.u + node.size * 0.5f) / rootSize * 2f - 1f;
-            float v_norm = (node.v + node.size * 0.5f) / rootSize * 2f - 1f;
+            float u_norm = (node.u + node.size * 0.5f) / rootTexSize * 2f - 1f;
+            float v_norm = (node.v + node.size * 0.5f) / rootTexSize * 2f - 1f;
             Vector3 localPos = GetLocalPosFromUV(node.face, u_norm, v_norm);
-            return localPos.normalized * sphereRadius;
+            return localPos.normalized * radius;
         }
 
         // 获取节点在世界空间中的边长, 近似为球面弧长对应的弦长
         public float GetNodeWorldSize(CubemapQuadTree node) {
             // 获取节点四个角点，计算平均边长
-            float u0 = (float)node.u / rootSize * 2f - 1f;
-            float v0 = (float)node.v / rootSize * 2f - 1f;
-            float u1 = (float)(node.u + node.size) / rootSize * 2f - 1f;
-            float v1 = (float)(node.v + node.size) / rootSize * 2f - 1f;
-            Vector3 p00 = GetLocalPosFromUV(node.face, u0, v0).normalized * sphereRadius;
-            Vector3 p01 = GetLocalPosFromUV(node.face, u0, v1).normalized * sphereRadius;
-            Vector3 p10 = GetLocalPosFromUV(node.face, u1, v0).normalized * sphereRadius;
+            float u0 = (float)node.u / rootTexSize * 2f - 1f;
+            float v0 = (float)node.v / rootTexSize * 2f - 1f;
+            float u1 = (float)(node.u + node.size) / rootTexSize * 2f - 1f;
+            float v1 = (float)(node.v + node.size) / rootTexSize * 2f - 1f;
+            Vector3 p00 = GetLocalPosFromUV(node.face, u0, v0).normalized * radius;
+            Vector3 p01 = GetLocalPosFromUV(node.face, u0, v1).normalized * radius;
+            Vector3 p10 = GetLocalPosFromUV(node.face, u1, v0).normalized * radius;
             float width = Vector3.Distance(p00, p10);
             float height = Vector3.Distance(p00, p01);
             return (width + height) * 0.5f;
@@ -59,9 +59,9 @@ namespace IcoSphere {
             float u1 = 1f;
             float v1 = 1f;
             // 选择任意面计算, 例如face = R, 因为对称性结果相同
-            Vector3 p00 = GetLocalPosFromUV(0, u0, v0).normalized * sphereRadius;
-            Vector3 p01 = GetLocalPosFromUV(0, u0, v1).normalized * sphereRadius;
-            Vector3 p10 = GetLocalPosFromUV(0, u1, v0).normalized * sphereRadius;
+            Vector3 p00 = GetLocalPosFromUV(0, u0, v0).normalized * radius;
+            Vector3 p01 = GetLocalPosFromUV(0, u0, v1).normalized * radius;
+            Vector3 p10 = GetLocalPosFromUV(0, u1, v0).normalized * radius;
             float width = Vector3.Distance(p00, p10);
             float height = Vector3.Distance(p00, p01);
             return (width + height) * 0.5f;

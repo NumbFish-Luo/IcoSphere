@@ -25,13 +25,13 @@ namespace IcoSphere {
         private const float LOD_FACTOR = 0.25f;
 
         // 初始化
-        public CubemapQuadTreeManager(int rootSize, float planetRadius, int texArrCapacity, UnityAction<CubemapQuadTree> onLoadData) {
-            mapper = new CubemapToWorldMapper(rootSize, planetRadius);
+        public CubemapQuadTreeManager(int rootTexSize, float radius, int vtArrCapacity, UnityAction<CubemapQuadTree> onLoadData) {
+            mapper = new CubemapToWorldMapper(rootTexSize, radius);
             this.onLoadData = onLoadData;
 
             // 初始化纹理索引池
             freePhyTexIdxes = new Queue<int>();
-            for (int i = 0; i < texArrCapacity; ++i) {
+            for (int i = 0; i < vtArrCapacity; ++i) {
                 freePhyTexIdxes.Enqueue(i);
             }
 
@@ -46,7 +46,7 @@ namespace IcoSphere {
             // 创建6个根节点
             for (int face = 0; face < 6; ++face) {
                 int idx = DequeuePhyTexIdx(); // 分配物理索引
-                CubemapQuadTree root = CubemapQuadTree.NewRoot((CubemapFace)face, 0, 0, rootSize, idx);
+                CubemapQuadTree root = CubemapQuadTree.NewRoot((CubemapFace)face, 0, 0, rootTexSize, idx);
                 roots[face] = root; // 缓存根节点
                 nowNodes[face].Enqueue(root);
                 onLoadData?.Invoke(root);

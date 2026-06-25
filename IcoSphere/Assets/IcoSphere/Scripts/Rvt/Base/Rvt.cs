@@ -11,7 +11,8 @@ namespace IcoSphere {
         [SerializeField] private ComputeShader idxGenerator;
 
         // ---- 可调参数 ----
-        [SerializeField] private int rootSize = 1024;
+        [SerializeField] private int rootTexSize = 1024;
+        [SerializeField] private int vtArrCapacity = 512;
         [SerializeField] private Vector3 terrainOffset;
 
         // ---- 四叉树 ----
@@ -28,7 +29,7 @@ namespace IcoSphere {
 
         private void Awake() {
             // 创建索引贴图, 并传入给Compute Shader
-            rtIdx = new RenderTexture(rootSize, rootSize, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear) {
+            rtIdx = new RenderTexture(rootTexSize, rootTexSize, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear) {
                 useMipMap = false,
                 autoGenerateMips = false,
                 enableRandomWrite = true,
@@ -38,10 +39,12 @@ namespace IcoSphere {
             kernelMain = idxGenerator.FindKernel("Main");
             idxGenerator.SetTexture(kernelMain, "Result", rtIdx);
 
+            int vtTexSize = rootTexSize / 2;
+            virtualCapture.Init(vtTexSize);
+
             // 创建纹理数组rt
-            int arrSize = 256 + 128;
-            rtArrAlbedo = new RenderTexture(VirtualCapture.vtArrSize, VirtualCapture.vtArrSize, 0, RenderTextureFormat.ARGB32) {
-                volumeDepth = arrSize,
+            rtArrAlbedo = new RenderTexture(vtTexSize, vtTexSize, 0, RenderTextureFormat.ARGB32) {
+                volumeDepth = vtArrCapacity,
                 wrapMode = TextureWrapMode.Clamp,
                 dimension = UnityEngine.Rendering.TextureDimension.Tex2DArray,
                 useMipMap = true,
@@ -49,8 +52,8 @@ namespace IcoSphere {
             };
             rtArrAlbedo.Create();
 
-            rtArrNormal = new RenderTexture(VirtualCapture.vtArrSize, VirtualCapture.vtArrSize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear) {
-                volumeDepth = arrSize,
+            rtArrNormal = new RenderTexture(vtTexSize, vtTexSize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear) {
+                volumeDepth = vtArrCapacity,
                 wrapMode = TextureWrapMode.Clamp,
                 dimension = UnityEngine.Rendering.TextureDimension.Tex2DArray,
                 useMipMap = true,
@@ -59,9 +62,9 @@ namespace IcoSphere {
             rtArrNormal.Create();
 
             // 初始化四叉树
-            root = quadTreeManager.CreateRoot(rootSize, rtArrAlbedo.volumeDepth, OnLoadNodeData);
+            root = quadTreeManager.CreateRoot(rootTexSize, rtArrAlbedo.volumeDepth, OnLoadNodeData);
 
-            Shader.SetGlobalInt("_VT_RootSize", rootSize);
+            Shader.SetGlobalInt("_VT_RootTexSize", rootTexSize);
             Shader.SetGlobalTexture("_VT_AlbedoTex", rtArrAlbedo);
             Shader.SetGlobalTexture("_VT_NormalTex", rtArrNormal);
             Shader.SetGlobalTexture("_VT_IdxTex", rtIdx);

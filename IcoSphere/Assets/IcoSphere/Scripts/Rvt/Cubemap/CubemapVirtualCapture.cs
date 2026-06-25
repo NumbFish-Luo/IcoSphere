@@ -4,6 +4,8 @@ using UnityEngine;
 
 namespace IcoSphere {
     public class CubemapVirtualCapture : MonoBehaviour {
-        
+        public void Init(int vtTexSize) {
+
+        }
     }
 }
