@@ -101,25 +101,28 @@ namespace IcoSphere {
 
         // ---- 私有成员函数 ----
         private void OnLoadNodeData(CubemapQuadTree node) {
-            Debug.Log($"Load node: f = {node.face}, u = {node.u}, v = {node.v}, s = {node.size}, i = {node.phyTexIdx}");
+            int idx = node.phyTexIdx;
+            int u = node.u;
+            int v = node.v;
+            int s = node.size;
+            int f = (int)node.face;
 
             // todo: 实现纹理加载逻辑
             // virtualCapture.VirtualCaptureMrt(node, out RenderTexture rtAlbedo, out RenderTexture rtNormal);
 
             // 将渲染结果复制到纹理数组的对应切片中, 同时复制4个mip级别, 可根据需求调整
             // for (int i = 0; i < 4; ++i) {
-            //     Graphics.CopyTexture(rtAlbedo, 0, i, rtArrAlbedo, node.phyTexIdx, i);
-            //     Graphics.CopyTexture(rtNormal, 0, i, rtArrNormal, node.phyTexIdx, i);
+            //     Graphics.CopyTexture(rtAlbedo, 0, i, rtArrAlbedo, idx, i);
+            //     Graphics.CopyTexture(rtNormal, 0, i, rtArrNormal, idx, i);
             // }
 
-            // todo: 通过ComputeShader更新索引贴图
-            // ...
-            Vector4 val = new(node.phyTexIdx, node.u, node.v, node.size);
+            // 通过ComputeShader更新索引贴图
+            Vector4 val = new(idx, u, v, s);
             idxGenerator.SetVector("_Val", val);
-            idxGenerator.SetInt("_Face", (int)node.face);
-            idxGenerator.SetInt("_OffsetU", node.u);
-            idxGenerator.SetInt("_OffsetV", node.v);
-            idxGenerator.Dispatch(kernelMain, node.size, node.size, 1); // 传入size * size * 1个线程
+            idxGenerator.SetInt("_Face", f);
+            idxGenerator.SetInt("_OffsetU", u);
+            idxGenerator.SetInt("_OffsetV", v);
+            idxGenerator.Dispatch(kernelMain, s, s, 1); // 传入(s * s * 1)个线程
         }
 
         private void ReleaseRt(ref RenderTexture rt) {
