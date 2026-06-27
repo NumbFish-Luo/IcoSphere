@@ -168,8 +168,8 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   cam: {fileID: 159090836}
   radius: 1000
-  rootSize: 1024
-  texArrCapacity: 512
+  rootTexSize: 1024
+  vtArrCapacity: 512
   selectedFace: 0
   showAllFaces: 1
 --- !u!1 &159090834
@@ -505,11 +505,12 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   cam: {fileID: 159090836}
   virtualCapture: {fileID: 979437401}
+  idxGenerator: {fileID: 7200000, guid: 1b7195402740d054e95c0c85d00aee04, type: 3}
   radius: 1000
-  rootSize: 1024
-  texArrCapacity: 512
-  selectedFace: 0
+  rootTexSize: 1024
+  vtArrCapacity: 512
   showAllFaces: 1
+  selectedFace: 0
 --- !u!114 &979437401
 MonoBehaviour:
   m_ObjectHideFlags: 0

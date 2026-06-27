@@ -5,8 +5,8 @@ namespace IcoSphere {
         [Header("Planet Settings")]
         [SerializeField] private Camera cam;
         [SerializeField] private float radius = 1000.0f;
-        [SerializeField] private int rootSize = 1024;
-        [SerializeField] private int texArrCapacity = 512;
+        [SerializeField] private int rootTexSize = 1024;
+        [SerializeField] private int vtArrCapacity = 512;
 
         [Header("Debug Visualization")]
         [SerializeField] private CubemapFace selectedFace = CubemapFace.R; // 选择要显示的面
@@ -15,12 +15,7 @@ namespace IcoSphere {
         private CubemapQuadTreeManager quadTreeManager = null;
 
         private void Awake() {
-            quadTreeManager = new CubemapQuadTreeManager(
-                rootSize,
-                radius,
-                texArrCapacity,
-                OnLoadNodeData
-            );
+            quadTreeManager = new(rootTexSize, radius, vtArrCapacity, OnLoadNodeData);
         }
 
         private void Update() {

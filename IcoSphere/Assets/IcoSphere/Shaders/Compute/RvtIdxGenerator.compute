@@ -1,0 +1,10 @@
+#pragma kernel Main
+
+RWTexture2D<float4> _Result;
+int4 _Val; // x: node.phyTexIdx, y: node.x, z: node.z, w: node.size
+
+// 调度时, 会传入node.size * node.size个线程, 然后每个线程只处理一个像素, 将一个正方形区域的像素值修改为当前四叉树区块的数据
+[numthreads(1, 1, 1)] // 每个线程只处理一个像素
+void Main(uint3 id : SV_DispatchThreadID) {
+    _Result[id.xy + _Val.yz] = _Val;
+}

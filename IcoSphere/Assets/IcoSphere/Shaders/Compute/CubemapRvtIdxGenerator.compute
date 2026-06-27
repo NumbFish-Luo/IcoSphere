@@ -1,0 +1,12 @@
+#pragma kernel Main
+
+RWTexture2DArray<float4> _Result;
+int4 _Val; // x: node.phyTexIdx, y: node.u, z: node.v, w: node.size
+uint _Face; // node.face
+
+// 调度时, 会传入node.size * node.size个线程, 每个线程只处理一个像素
+// 然后将当前cubemap其中一个面的切片 (_Face) 的一个正方形区域 (node.size * node.size) 的像素值修改为当前四叉树区块的数据 (_Val)
+[numthreads(1, 1, 1)] // 每个线程只处理一个像素
+void CSMain (uint3 id : SV_DispatchThreadID) {
+    _Result[uint3(id.x + _Val.y, id.y + _Val.z, _Face)] = _Val;
+}

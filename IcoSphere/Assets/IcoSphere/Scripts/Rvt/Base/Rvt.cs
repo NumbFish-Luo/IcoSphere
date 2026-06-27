@@ -37,7 +37,7 @@ namespace IcoSphere {
             };
             rtIdx.Create();
             kernelMain = idxGenerator.FindKernel("Main");
-            idxGenerator.SetTexture(kernelMain, "Result", rtIdx);
+            idxGenerator.SetTexture(kernelMain, "_Result", rtIdx);
 
             int vtTexSize = rootTexSize / 2;
             virtualCapture.Init(vtTexSize);
@@ -110,10 +110,8 @@ namespace IcoSphere {
             }
 
             // 通过ComputeShader更新索引贴图
-            idxGenerator.SetVector("value", new Vector4(node.phyTexIdx, node.x, node.z, node.size));
-            idxGenerator.SetInt("offsetX", node.x);
-            idxGenerator.SetInt("offsetZ", node.z);
-            idxGenerator.Dispatch(kernelMain, size, size, 1);
+            idxGenerator.SetVector("_Val", new Vector4(node.phyTexIdx, node.x, node.z, node.size));
+            idxGenerator.Dispatch(kernelMain, size, size, 1); // 传入size * size * 1个线程
 
             Profiler.EndSample();
         }
