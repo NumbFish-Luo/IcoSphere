@@ -74,9 +74,13 @@ namespace IcoSphere {
 
             // 初始化Shader全局参数
             Shader.SetGlobalInt("_VT_RootTexSize", rootTexSize);
-            Shader.SetGlobalTexture("_VT_AlbedoTex", rtArrAlbedo);
-            Shader.SetGlobalTexture("_VT_NormalTex", rtArrNormal);
-            Shader.SetGlobalTexture("_VT_IdxTex", rtArrIdx);
+            Shader.SetGlobalTexture("_VT_ArrIdx", rtArrIdx);
+            Shader.SetGlobalTexture("_VT_ArrAlbedo", rtArrAlbedo);
+            Shader.SetGlobalTexture("_VT_ArrNormal", rtArrNormal);
+
+            // 兼容旧版Shader方案, C#的变量名暂且不变, 只是给Shader添加全局参数
+            Shader.SetGlobalTexture("_VT_ArrDiffuse", rtArrAlbedo);
+            Shader.SetGlobalTexture("_VT_ArrHeight", rtArrNormal);
         }
 
         private void Update() {
@@ -84,7 +88,9 @@ namespace IcoSphere {
         }
 
         private void OnDestroy() {
+            ReleaseRt(ref rtArrIdx);
             ReleaseRt(ref rtArrAlbedo);
+            ReleaseRt(ref rtArrNormal);
         }
 
 #if UNITY_EDITOR
@@ -107,14 +113,14 @@ namespace IcoSphere {
             int s = node.size;
             int f = (int)node.face;
 
-            // todo: 实现纹理加载逻辑
-            // virtualCapture.VirtualCaptureMrt(node, out RenderTexture rtAlbedo, out RenderTexture rtNormal);
+            // 实现纹理加载逻辑. 暂时使用旧版方案, 即使用diffuse和height, 而不是更加现代的albedo和normal
+            virtualCapture.VirtualCaptureMrt_Old(node, out RenderTexture rtDiffuse, out RenderTexture rtHeight);
 
             // 将渲染结果复制到纹理数组的对应切片中, 同时复制4个mip级别, 可根据需求调整
-            // for (int i = 0; i < 4; ++i) {
-            //     Graphics.CopyTexture(rtAlbedo, 0, i, rtArrAlbedo, idx, i);
-            //     Graphics.CopyTexture(rtNormal, 0, i, rtArrNormal, idx, i);
-            // }
+            for (int i = 0; i < 4; ++i) {
+                Graphics.CopyTexture(rtDiffuse, 0, i, rtArrAlbedo, idx, i);
+                Graphics.CopyTexture(rtHeight, 0, i, rtArrNormal, idx, i);
+            }
 
             // 通过ComputeShader更新索引贴图
             Vector4 val = new(idx, u, v, s);
