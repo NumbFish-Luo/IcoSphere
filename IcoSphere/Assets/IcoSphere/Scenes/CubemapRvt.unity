@@ -670,6 +670,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 796fab2f128f60141aa6e37fd0dfff41, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
+  atlasSrcPath: Assets/IcoSphere/Textures/Terrain
+  atlasDstPath: Assets/IcoSphere/Atlas
+  atlasTexSuffix: .png
+  atlasTexSize: 1024
+  matBlit: {fileID: 0}
+  atlasDiffuse: {fileID: 18700000, guid: dffe31da3327fcb4797801502561ae4e, type: 2}
+  atlasHeight: {fileID: 18700000, guid: 0db4b583bcd3a3a44b4c30d07ce033b9, type: 2}
+  atlasMix: {fileID: 18700000, guid: a65061ba4249c934f933d703accf50a3, type: 2}
 --- !u!1 &1099801326
 GameObject:
   m_ObjectHideFlags: 0

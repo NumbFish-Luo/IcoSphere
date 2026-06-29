@@ -8,14 +8,27 @@ using UnityEngine;
 
 namespace IcoSphere {
     public class CubemapVirtualCapture : MonoBehaviour {
+        // ---- 可调参数 ----
         [SerializeField] private string atlasSrcPath = "Assets/IcoSphere/Textures/Terrain";
         [SerializeField] private string atlasDstPath = "Assets/IcoSphere/Atlas";
         [SerializeField] private string atlasTexSuffix = ".png";
         [SerializeField] private int atlasTexSize = 1024;
         [SerializeField] private Material matBlit;
+        [SerializeField] private Texture2DArray atlasDiffuse;
+        [SerializeField] private Texture2DArray atlasHeight;
+        [SerializeField] private Texture2DArray atlasMix;
 
-        private RenderTexture[] rts = new RenderTexture[2];
-        private RenderBuffer[] bufs = new RenderBuffer[2];
+        // ---- 私有成员变量 ----
+        // 数值大小等同于需要mrt一次生成的贴图数量大小, 旧版是Diffuse + Height + Mix = 3, 新版是Albedo + Normal = 2
+        private RenderTexture[] rts = new RenderTexture[3];
+        private RenderBuffer[] bufs = new RenderBuffer[3];
+
+        // ---- 内部类 ----
+        private class ImgPathGroup {
+            public string dPath;
+            public string hPath;
+            public string mPath;
+        }
 
         // ---- Unity生命周期函数 ----
         private void OnDestroy() {
@@ -29,11 +42,13 @@ namespace IcoSphere {
 
         // ---- 公有成员函数 ----
         public void Init(int vtTexSize) {
-            rts[0] = new(vtTexSize, vtTexSize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
-            rts[1] = new(vtTexSize, vtTexSize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
-            for (int i = 0; i < 2; ++i) {
-                rts[i].useMipMap = true;
-                rts[i].autoGenerateMips = false;
+            // 这里使用旧版的Diffuse + Height + Mix组合
+            // 如果使用更加现代的Albedo + Normal组合, 则需要Normal是RenderTextureReadWrite.Linear
+            for (int i = 0; i < 3; ++i) {
+                rts[i] = new(vtTexSize, vtTexSize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB) {
+                    useMipMap = true,
+                    autoGenerateMips = false
+                };
                 rts[i].Create();
                 bufs[i] = rts[i].colorBuffer;
             }
@@ -47,26 +62,15 @@ namespace IcoSphere {
             Shader.SetGlobalInt("_VT_TexSize", vtTexSize);
         }
 
-        // todo: 更加现代一些的贴图方案, 使用albedo和normal代替diffuse和height
-        public void VirtualCaptureMrt(CubemapQuadTree node, out RenderTexture rtAlbedo, out RenderTexture rtNormal) {
-            rtAlbedo = null;
-            rtNormal = null;
-        }
-
-        // 旧版方案, 使用diffuse和height, 而不是更加现代的albedo和normal
-        public void VirtualCaptureMrt_Old(CubemapQuadTree node, out RenderTexture rtDiffuse, out RenderTexture rtHeight) {
+        // 这里使用旧版的Diffuse + Height + Mix组合, 后面需要改成现代的Albedo + Normal组合
+        public void VirtualCaptureMrt(CubemapQuadTree node, out RenderTexture rtDiffuse, out RenderTexture rtHeight, out RenderTexture rtMix) {
             rtDiffuse = null;
             rtHeight = null;
+            rtMix = null;
         }
 
         // ---- 私有成员函数 ----
 #if UNITY_EDITOR
-        private class ImgPathGroup {
-            public string dPath;
-            public string hPath;
-            public string mPath;
-        }
-
         // 在这里制作图集, 实为多层切片的Texture2DArray, 需要贴图为RGBA 32bit格式
         // 将指定文件夹内的所有贴图, 按_d (diffuse), _h (height), _m (mix)后缀生成对应图集
         // 也就是共3个图集, 分别命名为AtlasDiffuse, AtlasHeight, AtlasMix

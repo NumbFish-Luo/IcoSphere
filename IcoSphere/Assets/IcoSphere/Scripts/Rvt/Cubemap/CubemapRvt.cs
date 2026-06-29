@@ -25,8 +25,9 @@ namespace IcoSphere {
 
         // ---- 带多层切片的RT, 6个面混用 ----
         private RenderTexture rtArrIdx = null;
-        private RenderTexture rtArrAlbedo = null;
-        private RenderTexture rtArrNormal = null;
+        private RenderTexture rtArrDiffuse = null;
+        private RenderTexture rtArrHeight = null;
+        private RenderTexture rtArrMix = null;
 
         // ---- Compute Shader ----
         private int kernelMain;
@@ -51,23 +52,11 @@ namespace IcoSphere {
             virtualCapture.Init(vtTexSize);
 
             // 创建纹理数组rt
-            rtArrAlbedo = new(vtTexSize, vtTexSize, 0, RenderTextureFormat.ARGB32) {
-                volumeDepth = vtArrCapacity,
-                wrapMode = TextureWrapMode.Clamp,
-                dimension = UnityEngine.Rendering.TextureDimension.Tex2DArray,
-                useMipMap = true,
-                autoGenerateMips = false
-            };
-            rtArrAlbedo.Create();
-
-            rtArrNormal = new RenderTexture(vtTexSize, vtTexSize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear) {
-                volumeDepth = vtArrCapacity,
-                wrapMode = TextureWrapMode.Clamp,
-                dimension = UnityEngine.Rendering.TextureDimension.Tex2DArray,
-                useMipMap = true,
-                autoGenerateMips = false
-            };
-            rtArrNormal.Create();
+            // 这里使用旧版的Diffuse + Height + Mix组合
+            // 如果使用更加现代的Albedo + Normal组合, 则需要Normal是RenderTextureReadWrite.Linear
+            NewRtArr(ref rtArrDiffuse, vtTexSize, RenderTextureReadWrite.sRGB);
+            NewRtArr(ref rtArrHeight, vtTexSize, RenderTextureReadWrite.sRGB);
+            NewRtArr(ref rtArrMix, vtTexSize, RenderTextureReadWrite.sRGB);
 
             // 初始化四叉树
             quadTreeManager = new(rootTexSize, radius, vtArrCapacity, OnLoadNodeData);
@@ -75,12 +64,15 @@ namespace IcoSphere {
             // 初始化Shader全局参数
             Shader.SetGlobalInt("_VT_RootTexSize", rootTexSize);
             Shader.SetGlobalTexture("_VT_ArrIdx", rtArrIdx);
-            Shader.SetGlobalTexture("_VT_ArrAlbedo", rtArrAlbedo);
-            Shader.SetGlobalTexture("_VT_ArrNormal", rtArrNormal);
 
-            // 兼容旧版Shader方案, C#的变量名暂且不变, 只是给Shader添加全局参数
-            Shader.SetGlobalTexture("_VT_ArrDiffuse", rtArrAlbedo);
-            Shader.SetGlobalTexture("_VT_ArrHeight", rtArrNormal);
+            // 现代的Albedo + Normal组合
+            // Shader.SetGlobalTexture("_VT_ArrAlbedo", rtArrAlbedo);
+            // Shader.SetGlobalTexture("_VT_ArrNormal", rtArrNormal);
+
+            // 这里使用旧版的Diffuse + Height + Mix组合
+            Shader.SetGlobalTexture("_VT_ArrDiffuse", rtArrDiffuse);
+            Shader.SetGlobalTexture("_VT_ArrHeight", rtArrHeight);
+            Shader.SetGlobalTexture("_VT_ArrMix", rtArrMix);
         }
 
         private void Update() {
@@ -89,8 +81,9 @@ namespace IcoSphere {
 
         private void OnDestroy() {
             ReleaseRt(ref rtArrIdx);
-            ReleaseRt(ref rtArrAlbedo);
-            ReleaseRt(ref rtArrNormal);
+            ReleaseRt(ref rtArrDiffuse);
+            ReleaseRt(ref rtArrHeight);
+            ReleaseRt(ref rtArrMix);
         }
 
 #if UNITY_EDITOR
@@ -106,6 +99,17 @@ namespace IcoSphere {
 #endif
 
         // ---- 私有成员函数 ----
+        private void NewRtArr(ref RenderTexture rtArr, int size, RenderTextureReadWrite rw) {
+            rtArr = new(size, size, 0, RenderTextureFormat.ARGB32, rw) {
+                volumeDepth = vtArrCapacity,
+                wrapMode = TextureWrapMode.Clamp,
+                dimension = UnityEngine.Rendering.TextureDimension.Tex2DArray,
+                useMipMap = true,
+                autoGenerateMips = false
+            };
+            rtArr.Create();
+        }
+
         private void OnLoadNodeData(CubemapQuadTree node) {
             int idx = node.phyTexIdx;
             int u = node.u;
@@ -113,13 +117,14 @@ namespace IcoSphere {
             int s = node.size;
             int f = (int)node.face;
 
-            // 实现纹理加载逻辑. 暂时使用旧版方案, 即使用diffuse和height, 而不是更加现代的albedo和normal
-            virtualCapture.VirtualCaptureMrt_Old(node, out RenderTexture rtDiffuse, out RenderTexture rtHeight);
+            // 实现纹理加载逻辑. 暂时使用旧版方案
+            virtualCapture.VirtualCaptureMrt(node, out RenderTexture rtDiffuse, out RenderTexture rtHeight, out RenderTexture rtMix);
 
             // 将渲染结果复制到纹理数组的对应切片中, 同时复制4个mip级别, 可根据需求调整
-            for (int i = 0; i < 4; ++i) {
-                Graphics.CopyTexture(rtDiffuse, 0, i, rtArrAlbedo, idx, i);
-                Graphics.CopyTexture(rtHeight, 0, i, rtArrNormal, idx, i);
+            for (int mip = 0; mip < 4; ++mip) {
+                Graphics.CopyTexture(rtDiffuse, 0, mip, rtArrDiffuse, idx, mip);
+                Graphics.CopyTexture(rtHeight, 0, mip, rtArrHeight, idx, mip);
+                Graphics.CopyTexture(rtHeight, 0, mip, rtArrMix, idx, mip);
             }
 
             // 通过ComputeShader更新索引贴图
