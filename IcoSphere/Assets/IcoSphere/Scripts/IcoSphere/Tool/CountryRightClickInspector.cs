@@ -3,6 +3,9 @@ using UnityEngine;
 using UnityEngine.UI;
 
 namespace IcoSphere {
+    /// <summary>
+    /// 右键工具 (AI生成)
+    /// </summary>
     public class CountryRightClickInspector : MonoBehaviour {
         [SerializeField] private CountryColorDrawer countryColorDrawer = null;
         [SerializeField] private Text outputText = null;

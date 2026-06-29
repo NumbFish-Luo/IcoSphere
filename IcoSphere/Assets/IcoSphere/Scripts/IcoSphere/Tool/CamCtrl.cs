@@ -4,7 +4,9 @@ using UnityEngine;
 using UnityEngine.UI;
 
 namespace IcoSphere {
-    // 简单的相机控制脚本
+    /// <summary>
+    /// 简单的相机控制脚本
+    /// </summary>
     public class CamCtrl : MonoBehaviour {
         [SerializeField] private Camera cam;
         [SerializeField] private Text txtInfo;

@@ -3,7 +3,9 @@ using System.IO;
 using UnityEngine;
 
 namespace IcoSphere {
-    // 二进制模型数据打包
+    /// <summary>
+    /// 二进制模型数据打包
+    /// </summary>
     public struct Pack {
         // Resources文件夹路径
         public static readonly string RES_DEFAULT_PATH = "Bin/pack_arr_";
@@ -15,6 +17,11 @@ namespace IcoSphere {
         public Tri[] adjTris;
         public PosVert[] posVerts;
 
+        /// <summary>
+        /// 读取指定迭代级别的二进制模型数据
+        /// </summary>
+        /// <param name="recursion">迭代级别</param>
+        /// <returns>数据包</returns>
         public static Pack Read(int recursion) {
             string resFilePath = RES_DEFAULT_PATH + recursion;
             Pack pack = new();

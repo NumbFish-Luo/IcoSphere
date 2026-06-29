@@ -8,15 +8,21 @@ using UnityEngine;
 using UnityEngine.Events;
 
 namespace IcoSphere {
+    /// <summary>
+    /// IcoSphere球体, 利用ComputeShader和Graphics.DrawMeshInstancedIndirect接口, 拥有渲染百万三角面的能力
+    /// </summary>
     public class IcoSphere : MonoBehaviour {
+        // --- 可调参数 ----
+        // 迭代级别, 迭代0是20面, 1是20 * 9 = 180面, n是20 * pow(9, n)面, 因此迭代5是1180980面
         [SerializeField, Range(0, 5)] private int recursion = 3;
         [SerializeField] private Material mat;
         [SerializeField] private ComputeShader computeShader;
         [SerializeField] private float camRadius = 1.0f;
         [SerializeField] private float sphereRadius = 1.0f;
-        [SerializeField] private float lineWidth = 0.00005f;
+        [SerializeField] private float lineWidth = 0.00005f; // 线条渲染宽度
 
-        private bool supportsComputeShaders;
+        // ---- 私有成员变量 ----
+        private bool supportsComputeShaders; // 检测系统是否支持ComputeShader
         private Camera cam;
         private Mesh mesh;
         private ComputeBuffer allBuf;
@@ -33,23 +39,35 @@ namespace IcoSphere {
         private InstanceData[] instanceData;
         private VertData[] vertData;
         private DrawHexData[] drawHexData;
-        private bool initialized;
+        private bool initialized; // 检测是否完成了初始化 (AI生成)
 
+        // ---- 公有静态变量 ----
+        public readonly static Vector4 DEFAULT_COL = new(0.5f, 0.5f, 0.5f, 0.0f);
+        public const int MAX_DRAW_HEX_COUNT = 1000; // 为了性能, 限制不能一次性传输太多数据给compute shader去动态修改颜色
+
+        // ---- 公有成员变量 ----
         // 初始化完成回调
         public UnityAction OnInitOver;
 
+        // ---- 公有成员函数 ----
         public float SphereRadius => sphereRadius;
         public bool IsInitialized => initialized;
         public int Recursion => recursion;
 
-        // 对于单个三角形, 需要知道的信息有3个顶点坐标值, 还有毗邻的3个三角形中心坐标值
-        // -----v0----
-        // \c20/ \c01/
-        //  \ / t \ /
-        //  v2-----v1
-        //    \c12/
-        //     \ /
-        // 然后为了最大化利用数据, xyz对应具体坐标, w对应序号(Int32)
+        // ---- 公有内部类 ----
+        /// <summary>
+        /// <para>三角形实例数据</para>
+        /// <para>对于单个三角形, 需要知道的信息有3个顶点坐标值, 还有毗邻的3个三角形中心坐标值</para>
+        /// <code>
+        /// -----v0----
+        /// \c20/ \c01/
+        ///  \ / t \ /
+        ///  v2-----v1
+        ///    \c12/
+        ///     \ /
+        /// </code>
+        /// <para>然后为了最大化利用数据, xyz对应具体坐标, w对应序号(Int32)</para>
+        /// </summary>
         [StructLayout(LayoutKind.Sequential)]
         public struct InstanceData {
             public uint id; // 三角形id
@@ -61,15 +79,18 @@ namespace IcoSphere {
             public Vector4 c20;
         }
 
-        // 顶点数据就是六边形数据, 因为每个六边形的中心点就是顶点
+        /// <summary>
+        /// 顶点数据就是六边形数据, 因为每个六边形的中心点就是顶点
+        /// </summary>
         [StructLayout(LayoutKind.Sequential)]
         public struct VertData {
             public Vector4 col; // rgb: 颜色, a: 国家id
             public Vector4 replace; // rgb: 替换色, a: 与col的插值t
         }
 
-        public readonly static Vector4 DEFAULT_COL = new(0.5f, 0.5f, 0.5f, 0.0f);
-
+        /// <summary>
+        /// 射线数据, 传入给ComputeShader执行计算
+        /// </summary>
         [StructLayout(LayoutKind.Sequential)]
         public struct RayData {
             public uint tid; // 三角形id
@@ -81,6 +102,9 @@ namespace IcoSphere {
             public float t; // 射线参数t (交点到原点的距离)
         };
 
+        /// <summary>
+        /// 六边形绘制数据, 传入给ComputeShader执行计算
+        /// </summary>
         [StructLayout(LayoutKind.Sequential)]
         public struct DrawHexData {
             public uint id; // 顶点id
@@ -88,13 +112,16 @@ namespace IcoSphere {
             public Color col;
         }
 
+        // ---- 公有枚举 ----
+        /// <summary>
+        /// 绘制模式枚举
+        /// </summary>
         public enum DrawHexMode {
             CountryMode   = 0, // 修改国家数据, col.rgb: 颜色, col.a: 国家id
             HighlightMode = 1  // 替换颜色高亮, col.rgb: 替换色, col.a: 插值t
         }
 
-        public const int MAX_DRAW_HEX_COUNT = 1000; // 为了性能, 限制不能一次性传输太多数据给compute shader去动态修改颜色
-
+        // ---- Unity生命周期函数 ----
         private void Awake() {
             supportsComputeShaders = CheckSupportsComputeShaders();
         }
@@ -114,11 +141,6 @@ namespace IcoSphere {
 #if UNITY_EDITOR
             UnityEditor.AssemblyReloadEvents.afterAssemblyReload -= OnAfterAssemblyReload;
 #endif
-        }
-
-        // todo: Material.SetBuffer()设置的绑定关系是非持久的 (non-persistent), 当按下Ctrl+R刷新时, 需要重新绑定数据
-        private void OnAfterAssemblyReload() {
-            // todo...
         }
 
         private void Update() {
@@ -173,14 +195,7 @@ namespace IcoSphere {
             ResetMat();
         }
 
-        public bool EnsureInitialized() {
-            if (initialized) {
-                return true;
-            }
-
-            return Init();
-        }
-
+        // ---- 私有成员函数 ----
         private bool Init() {
             supportsComputeShaders = CheckSupportsComputeShaders();
             if (supportsComputeShaders == false) {
@@ -213,12 +228,9 @@ namespace IcoSphere {
             return true;
         }
 
-        public bool CheckSupportsComputeShaders() {
-            if (SystemInfo.supportsComputeShaders == false) {
-                Debug.LogWarning("Compute shaders not supported");
-                return false;
-            }
-            return true;
+        // todo: Material.SetBuffer()设置的绑定关系是非持久的 (non-persistent), 当按下Ctrl+R刷新时, 需要重新绑定数据
+        private void OnAfterAssemblyReload() {
+            // todo...
         }
 
         private Mesh NewTriMesh() {
@@ -402,12 +414,43 @@ namespace IcoSphere {
             return result;
         }
 
-        // 设置当前射线击中的六边形的高亮颜色
+        // ---- 公有成员函数 ----
+        /// <summary>
+        /// 确保完成初始化 (AI生成)
+        /// </summary>
+        /// <returns>是否完成初始化</returns>
+        public bool EnsureInitialized() {
+            if (initialized) {
+                return true;
+            }
+            return Init();
+        }
+
+        /// <summary>
+        /// 检测系统是否支持ComputeShader
+        /// </summary>
+        /// <returns>是否支持ComputeShader</returns>
+        public bool CheckSupportsComputeShaders() {
+            if (SystemInfo.supportsComputeShaders == false) {
+                Debug.LogWarning("Compute shaders not supported");
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// 设置当前射线击中的六边形的高亮颜色
+        /// </summary>
+        /// <param name="col">要设置的颜色</param>
         public void SetRayHexCol(Color col) {
             mat.SetColor("_RayHexCol", col);
         }
 
-        // 设置当前射线击中的六边形国家数据
+        /// <summary>
+        /// 设置当前射线击中的六边形国家数据
+        /// </summary>
+        /// <param name="countryCol">国家颜色</param>
+        /// <param name="countryId">国家ID</param>
         public void SetRayHexCountry(Color countryCol, uint countryId) {
             RayData[] outRayData = new RayData[1];
             rayBuf.GetData(outRayData);
@@ -419,6 +462,13 @@ namespace IcoSphere {
             drawHexBuf.SetData(drawHexData);
         }
 
+        /// <summary>
+        /// 尝试获取射线击中的六边形国家ID
+        /// </summary>
+        /// <param name="countryId">输出国家ID</param>
+        /// <param name="hexId">输出六边形ID</param>
+        /// <param name="rayData">输出射线数据</param>
+        /// <returns></returns>
         public bool TryGetRayHexCountryId(out uint countryId, out uint hexId, out RayData rayData) {
             countryId = 0;
             hexId = 0;
@@ -444,7 +494,11 @@ namespace IcoSphere {
             return true;
         }
 
-        // hexRgbIdDict: <hexRgb, id>, 例如<#FF0000, 1>
+        /// <summary>
+        /// 将世界地图平面纹理映射为国家刷色数据
+        /// </summary>
+        /// <param name="tex">世界地图平面纹理</param>
+        /// <param name="hexRgbIdDict">颜色和国家ID映射表, 例如(#FF0000, 1)</param>
         public void MappingTex(Texture2D tex, Dictionary<uint, uint> hexRgbIdDict) {
             if (tex.format != TextureFormat.RGBA32) {
                 Debug.LogWarning("纹理非RGBA32格式, 建议先转换后再调用");
@@ -481,6 +535,10 @@ namespace IcoSphere {
             mat.SetBuffer("_VertData", vertBuf);
         }
 
+        /// <summary>
+        /// 保存国家刷色数据 (.bytes)
+        /// </summary>
+        /// <param name="path">保存路径</param>
         public void SaveVertBufData(string path) {
             string directory = Path.GetDirectoryName(path);
             if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory)) {
@@ -495,6 +553,11 @@ namespace IcoSphere {
             }
         }
 
+        /// <summary>
+        /// 加载国家刷色数据 (.bytes)
+        /// </summary>
+        /// <param name="path">读取路径</param>
+        /// <returns>是否读取成功</returns>
         public bool LoadVertBufData(string path) {
             if (!File.Exists(path)) {
                 Debug.LogError("LoadAllBufData: 文件不存在 -> " + path);
@@ -516,64 +579,105 @@ namespace IcoSphere {
 
         // -------- 方便外部应用的API --------
 
-        // 返回所有地块的颜色数据
-        // 一般只需要用VertData.col就行, rgb: 颜色, a: 国家id
+        /// <summary>
+        /// <para>返回所有地块的颜色数据</para>
+        /// <para>一般只需要用VertData.col就行, rgb: 颜色, a: 国家id</para>
+        /// </summary>
+        /// <returns>所有地块的颜色数据</returns>
         public VertData[] GetAreaCountryColors() {
             vertBuf.GetData(vertData);
             return vertData;
         }
 
-        // 返回地块总数 (六边形/五边形数量)
+        /// <summary>
+        /// 返回地块总数 (六边形/五边形数量)
+        /// </summary>
+        /// <returns>地块总数</returns>
         public int GetAreaCount() {
             return pack.verts.Length;
         }
 
-        // 判断areaId是否有效, 用于避免点击、寻路、读档时传入非法id
+        /// <summary>
+        /// 判断areaId是否有效, 用于避免点击、寻路、读档时传入非法id
+        /// </summary>
+        /// <param name="areaId">需要判断的地块ID</param>
+        /// <returns>是否有效</returns>
         public bool IsValidAreaId(int areaId) {
             return 0 <= areaId && areaId < pack.verts.Length;
         }
 
-        // 返回某个地块中心点的世界坐标
+        /// <summary>
+        /// 返回某个地块中心点的世界坐标
+        /// </summary>
+        /// <param name="areaId">地块ID</param>
+        /// <returns>地块中心点的世界坐标</returns>
         public Vector3 GetAreaCenter(int areaId) {
             return pack.verts[areaId] * sphereRadius;
         }
 
-        // 返回某个地块中心点的世界坐标
-        // 注意! 这里返回的是原始坐标数据
-        // 如果需要使用, 要自己乘球体半径sphereRadius, 或用GetAreaCenter函数
+        /// <summary>
+        /// <para>返回某个地块中心点的世界坐标</para>
+        /// <para>注意! 这里返回的是原始坐标数据</para>
+        /// <para>如果需要使用, 要自己乘球体半径sphereRadius, 或用GetAreaCenter函数</para>
+        /// </summary>
+        /// <param name="areaId">地块ID</param>
+        /// <returns>地块中心点的原始世界坐标</returns>
         public Vector3 GetRawAreaCenter(int areaId) {
             return pack.verts[areaId];
         }
 
-        // 返回某个地块中心点的球面外法线, 用途：让单位、图标、模型能正确贴在球面上
+        /// <summary>
+        /// 返回某个地块中心点的球面外法线, 用途：让单位、图标、模型能正确贴在球面上
+        /// </summary>
+        /// <param name="areaId">地块ID</param>
+        /// <returns>地块中心点的球面外法线</returns>
         public Vector3 GetAreaNormal(int areaId) {
             return pack.verts[areaId].normalized;
         }
 
-        // 返回某个地块的相邻地块数量, 六边形是6, 五边形是5 (少数)
+        /// <summary>
+        /// 返回某个地块的相邻地块数量, 六边形是6, 五边形是5 (少数)
+        /// </summary>
+        /// <param name="areaId">地块ID</param>
+        /// <returns>相邻地块数量</returns>
         public int GetNeighborCount(int areaId) {
             Abut a = pack.abuts[areaId].A(0);
             return a[0] < 0 ? 5 : 6;
         }
 
-        // 返回某个相邻地块id, neighborIndex的范围是0到GetNeighborCount(areaId) - 1
+        /// <summary>
+        /// 返回某个相邻地块id, neighborIndex的范围是0到GetNeighborCount(areaId) - 1
+        /// </summary>
+        /// <param name="areaId">地块ID</param>
+        /// <param name="neighborIndex">相邻地块序号, 范围是0到GetNeighborCount(areaId) - 1</param>
+        /// <returns>相邻地块ID</returns>
         public int GetNeighborId(int areaId, int neighborIndex) {
             return pack.abuts[areaId].V(neighborIndex);
         }
 
-        // 获取未按坐标排序好的地块列表
+        /// <summary>
+        /// 获取未按坐标排序好的地块列表
+        /// </summary>
+        /// <returns>未按坐标排序好的地块列表</returns>
         public Vector3[] GetRawUnsortedAreas() {
             return pack.verts;
         }
 
-        // 获取按坐标排序好的地块列表
-        // 注意! 这里PosVert用的是原始坐标数据
-        // 如果需要使用, 要自己乘球体半径sphereRadius
+        /// <summary>
+        /// <para>获取按坐标排序好的地块列表</para>
+        /// <para>注意! 这里PosVert用的是原始坐标数据</para>
+        /// <para>如果需要使用, 要自己乘球体半径sphereRadius</para>
+        /// </summary>
+        /// <returns>按坐标排序好的地块列表</returns>
         public PosVert[] GetRawSortedAreas() {
             return pack.posVerts;
         }
 
-        // 尝试通过坐标寻找地块id, 如果没寻找到, 则返回-1
+        /// <summary>
+        /// 尝试通过坐标寻找地块id, 如果没寻找到, 则返回-1
+        /// </summary>
+        /// <param name="p">地块坐标</param>
+        /// <returns>地块ID</returns>
         public int FindAreaByPos(Vector3 p) {
             int i = PosVert.BinarySearch(pack.posVerts, p);
             if (i < 0) {
@@ -582,9 +686,14 @@ namespace IcoSphere {
             return pack.posVerts[i].v;
         }
 
-        // 用射线拾取地块
-        // 如果命中地块, 返回true, 并输出areaId
-        // 如果没有命中地块, 返回false
+        /// <summary>
+        /// <para>用射线拾取地块</para>
+        /// <para>如果命中地块, 返回true, 并输出areaId</para>
+        /// <para>如果没有命中地块, 返回false</para>
+        /// </summary>
+        /// <param name="ray">射线</param>
+        /// <param name="areaId">输出地块ID</param>
+        /// <returns>是否命中地块</returns>
         public bool TryPickArea(Ray ray, out int areaId) {
             areaId = 0;
 
@@ -606,8 +715,12 @@ namespace IcoSphere {
             return true;
         }
 
-        // 设置单个地块颜色
-        // 注意: 只是做选中高亮效果, 如果color的透明度为0, 则相当于清除高亮
+        /// <summary>
+        /// <para>设置单个地块颜色</para>
+        /// <para>注意: 只是做选中高亮效果, 如果color的透明度为0, 则相当于清除高亮</para>
+        /// </summary>
+        /// <param name="areaId">地块ID</param>
+        /// <param name="color">设置颜色</param>
         public void SetAreaColor(int areaId, Color color) {
             drawHexData[0] = new() {
                 id = (uint)areaId,
@@ -617,9 +730,14 @@ namespace IcoSphere {
             drawHexBuf.SetData(drawHexData);
         }
 
-        // 设置单个地块的国家颜色
-        // 注意: 需要同时传入正确的国家颜色和国家id才行
-        // 可以看CountryColorDrawer.countrySettings列表或countrySettingsDict字典获取正确的国家颜色和国家id
+        /// <summary>
+        /// <para>设置单个地块的国家颜色</para>
+        /// <para>注意: 需要同时传入正确的国家颜色和国家id才行</para>
+        /// <para>可以看CountryColorDrawer.countrySettings列表或countrySettingsDict字典获取正确的国家颜色和国家id</para>
+        /// </summary>
+        /// <param name="areaId">地块ID</param>
+        /// <param name="countryCol">国家颜色</param>
+        /// <param name="countryId">国家ID</param>
         public void ChangeAreaCountry(int areaId, Color countryCol, uint countryId) {
             drawHexData[0] = new() {
                 id = (uint)areaId,
@@ -629,8 +747,12 @@ namespace IcoSphere {
             drawHexBuf.SetData(drawHexData);
         }
 
-        // 批量设置多个地块为同一种颜色, 用途: 批量范围内选中高亮效果, 如果color的透明度为0, 则相当于清除高亮
-        // 注意: 为了性能考虑, 传入的数值大小不能超过MAX_DRAW_HEX_COUNT = 1000, 如果需要超过这个值, 则需要下一帧再传入剩余的数据
+        /// <summary>
+        /// <para>批量设置多个地块为同一种颜色, 用途: 批量范围内选中高亮效果, 如果color的透明度为0, 则相当于清除高亮</para>
+        /// <para>注意: 为了性能考虑, 传入的数值大小不能超过MAX_DRAW_HEX_COUNT = 1000, 如果需要超过这个值, 则需要下一帧再传入剩余的数据</para>
+        /// </summary>
+        /// <param name="areaIds">地块ID数组</param>
+        /// <param name="color">颜色</param>
         public void SetAreaColors(int[] areaIds, Color color) {
             int n = areaIds.Length;
             if (n > MAX_DRAW_HEX_COUNT) {
@@ -647,8 +769,13 @@ namespace IcoSphere {
             drawHexBuf.SetData(drawHexData);
         }
 
-        // 批量设置多个地块的国家颜色
-        // 注意: 为了性能考虑, 传入的数值大小不能超过MAX_DRAW_HEX_COUNT = 1000, 如果需要超过这个值, 则需要下一帧再传入剩余的数据
+        /// <summary>
+        /// <para>批量设置多个地块的国家颜色</para>
+        /// <para>注意: 为了性能考虑, 传入的数值大小不能超过MAX_DRAW_HEX_COUNT = 1000, 如果需要超过这个值, 则需要下一帧再传入剩余的数据</para>
+        /// </summary>
+        /// <param name="areaIds">地块ID数组</param>
+        /// <param name="countryCol">国家颜色</param>
+        /// <param name="countryId">国家ID</param>
         public void ChangeAreaCountries(int[] areaIds, Color countryCol, uint countryId) {
             int n = areaIds.Length;
             if (n > MAX_DRAW_HEX_COUNT) {
@@ -666,7 +793,10 @@ namespace IcoSphere {
             drawHexBuf.SetData(drawHexData);
         }
 
-        // 清除单个地块的特殊颜色, 并恢复默认颜色
+        /// <summary>
+        /// 清除单个地块的特殊颜色, 并恢复默认颜色
+        /// </summary>
+        /// <param name="areaId">地块ID</param>
         public void ClearAreaColor(int areaId) {
             SetAreaColor(areaId, Color.clear);
         }

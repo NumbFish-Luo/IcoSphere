@@ -3,12 +3,24 @@ using System.Collections.Generic;
 using UnityEngine;
 
 namespace IcoSphere {
+    /// <summary>
+    /// IcoSphere数学库
+    /// </summary>
     public static class Math {
+        /// <summary>
+        /// 黄金比例
+        /// </summary>
         public readonly static float GOLDEN_RATIO = (1.0f + Mathf.Sqrt(5.0f)) * 0.5f;
 
-        // 输入球心坐标, 球体半径, 射线起点, 射线方向
-        // 输出射线触碰到的球面坐标
-        // 返回值如果为false则没有触碰到球面
+        /// <summary>
+        /// 输出射线触碰到的球面坐标
+        /// </summary>
+        /// <param name="sphereCenter">球心坐标</param>
+        /// <param name="radius">球体半径</param>
+        /// <param name="rayOrigin">射线起点</param>
+        /// <param name="rayDir">射线方向</param>
+        /// <param name="sphereSurfacePoint">输出射线触碰到的球面坐标</param>
+        /// <returns>如果为false则没有触碰到球面</returns>
         public static bool GetRayResult(Vector3 sphereCenter, float radius, Vector3 rayOrigin, Vector3 rayDir, out Vector3 sphereSurfacePoint) {
             sphereSurfacePoint = Vector3.zero;
 
@@ -39,17 +51,28 @@ namespace IcoSphere {
             return true;
         }
 
-        // 输入相机, 球体半径, 射线起点
-        // 输出鼠标点击生成的射线, 以及射线触碰到的球面坐标
-        // 返回值如果为false则没有触碰到球面
+        /// <summary>
+        /// 输出鼠标点击生成的射线, 以及射线触碰到的球面坐标
+        /// </summary>
+        /// <param name="sphereCenter">球心坐标</param>
+        /// <param name="radius">球体半径</param>
+        /// <param name="cam">相机</param>
+        /// <param name="ray">输出鼠标点击生成的射线</param>
+        /// <param name="sphereSurfacePoint">输出射线触碰到的球面坐标</param>
+        /// <returns>如果为false则没有触碰到球面</returns>
         public static bool GetRayResult(Vector3 sphereCenter, float radius, Camera cam, out Ray ray, out Vector3 sphereSurfacePoint) {
             ray = cam.ScreenPointToRay(Input.mousePosition);
             return GetRayResult(sphereCenter, radius, ray.origin, ray.direction, out sphereSurfacePoint);
         }
 
-        // 输入IcoSphere球体, 相机
-        // 输出鼠标点击生成的射线, 以及射线触碰到的球面坐标
-        // 返回值如果为false则没有触碰到球面
+        /// <summary>
+        /// 输出鼠标点击生成的射线, 以及射线触碰到的球面坐标
+        /// </summary>
+        /// <param name="icoSphere">IcoSphere球体</param>
+        /// <param name="cam">相机</param>
+        /// <param name="ray">输出鼠标点击生成的射线</param>
+        /// <param name="sphereSurfacePoint">输出射线触碰到的球面坐标</param>
+        /// <returns>如果为false则没有触碰到球面</returns>
         public static bool GetRayResult(IcoSphere icoSphere, Camera cam, out Ray ray, out Vector3 sphereSurfacePoint) {
             return GetRayResult(Vector3.zero, icoSphere.SphereRadius, cam, out ray, out sphereSurfacePoint);
         }

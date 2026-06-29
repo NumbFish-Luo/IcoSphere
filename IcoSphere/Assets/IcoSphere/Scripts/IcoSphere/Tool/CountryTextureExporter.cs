@@ -7,6 +7,9 @@ using UnityEditor;
 #endif
 
 namespace IcoSphere {
+    /// <summary>
+    /// 国家贴图导出器 (AI生成)
+    /// </summary>
     public class CountryTextureExporter : MonoBehaviour {
         [SerializeField] private CountryColorDrawer countryColorDrawer = null;
         [SerializeField] private IcoSphere icoSphere = null;

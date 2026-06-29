@@ -70,13 +70,13 @@ namespace IcoSphere {
         }
 
         // ---- 私有成员函数 ----
-#if UNITY_EDITOR
         // 在这里制作图集, 实为多层切片的Texture2DArray, 需要贴图为RGBA 32bit格式
         // 将指定文件夹内的所有贴图, 按_d (diffuse), _h (height), _m (mix)后缀生成对应图集
         // 也就是共3个图集, 分别命名为AtlasDiffuse, AtlasHeight, AtlasMix
         // 例外: 有一张贴图Common_h是默认贴图，直接当每个图集的第一张贴图 (切片0位置)
         // 贴图默认读取文件夹: atlasSrcPath = "Assets/IcoSphere/Textures/Terrain"
         // 图集默认保存文件夹: atlasDstPath = "Assets/IcoSphere/Atlas"
+#if UNITY_EDITOR
         [ContextMenu("生成图集")]
         private void MakeAtlas() {
             // 默认贴图, 记得进行缩放
@@ -146,16 +146,39 @@ namespace IcoSphere {
             }
 
             // 生成并保存图集资产
-            CreateAndSaveTexArr(diffuseList, $"{atlasDstPath}/AtlasDiffuse.asset", "AtlasDiffuse");
-            CreateAndSaveTexArr(heightList, $"{atlasDstPath}/AtlasHeight.asset", "AtlasHeight");
-            CreateAndSaveTexArr(mixList, $"{atlasDstPath}/AtlasMix.asset", "AtlasMix");
+            if (CreateAndSaveTexArr(diffuseList, $"{atlasDstPath}/AtlasDiffuse.asset", "AtlasDiffuse") == false) {
+                Debug.LogError("图集生成失败!");
+                AssetDatabase.Refresh();
+                return;
+            }
+            if (CreateAndSaveTexArr(heightList, $"{atlasDstPath}/AtlasHeight.asset", "AtlasHeight") == false) {
+                Debug.LogError("图集生成失败!");
+                AssetDatabase.Refresh();
+                return;
+            }
+            if (CreateAndSaveTexArr(mixList, $"{atlasDstPath}/AtlasMix.asset", "AtlasMix") == false) {
+                Debug.LogError("图集生成失败!");
+                AssetDatabase.Refresh();
+                return;
+            }
 
             AssetDatabase.Refresh();
-            Debug.Log("图集生成完成！");
+            Debug.Log("图集生成完成!");
         }
+#endif
 
-        // 从贴图列表生成 Texture2DArray 并保存为 .asset 文件
-        private void CreateAndSaveTexArr(List<Texture2D> texs, string savePath, string arrName) {
+        // 从贴图列表生成Texture2DArray并保存为.asset文件
+#if UNITY_EDITOR
+        private bool CreateAndSaveTexArr(List<Texture2D> texs, string savePath, string arrName) {
+            // 检测一遍所有贴图格式
+            foreach (Texture2D tex in texs) {
+                if (tex.format != TextureFormat.RGBA32) {
+                    Debug.LogWarning("纹理非RGBA32格式, 建议先转换后再调用");
+                    Debug.LogWarning("请先阅读README文件修改图片设置");
+                    return false;
+                }
+            }
+
             // 尺寸是固定的, 如果贴图尺寸不同则需要进行缩放处理
             int w = atlasTexSize;
             int h = atlasTexSize;
@@ -172,13 +195,16 @@ namespace IcoSphere {
                     Graphics.CopyTexture(texs[i], 0, 0, 0, 0, w, h, texArr, i, 0, 0, 0);
                 } catch (System.Exception e) {
                     Debug.LogError($"拷贝贴图 {texs[i].name} 到 {arrName} 时出错：{e.Message}");
-                    return;
+                    return false;
                 }
             }
             AssetDatabase.CreateAsset(texArr, savePath);
+            return true;
         }
+#endif
 
         // 使用RT高质量缩放贴图
+#if UNITY_EDITOR
         private Texture2D ResizeTexture(Texture2D src, int w, int h) {
             RenderTexture rt = RenderTexture.GetTemporary(w, h, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB);
             Graphics.Blit(src, rt);
