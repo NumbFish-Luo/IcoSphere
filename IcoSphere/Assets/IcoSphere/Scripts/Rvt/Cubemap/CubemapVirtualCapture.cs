@@ -20,8 +20,8 @@ namespace IcoSphere {
 
         // ---- 私有成员变量 ----
         // 数值大小等同于需要mrt一次生成的贴图数量大小, 旧版是Diffuse + Height + Mix = 3, 新版是Albedo + Normal = 2
-        private RenderTexture[] rts = new RenderTexture[3];
-        private RenderBuffer[] bufs = new RenderBuffer[3];
+        private readonly RenderTexture[] rts = new RenderTexture[3];
+        private readonly RenderBuffer[] bufs = new RenderBuffer[3];
 
         // ---- 内部类 ----
         private class ImgPathGroup {
@@ -44,7 +44,7 @@ namespace IcoSphere {
         public void Init(int vtTexSize) {
             // 这里使用旧版的Diffuse + Height + Mix组合
             // 如果使用更加现代的Albedo + Normal组合, 则需要Normal是RenderTextureReadWrite.Linear
-            for (int i = 0; i < 3; ++i) {
+            for (int i = 0; i < rts.Length; ++i) {
                 rts[i] = new(vtTexSize, vtTexSize, 0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.sRGB) {
                     useMipMap = true,
                     autoGenerateMips = false
@@ -64,9 +64,39 @@ namespace IcoSphere {
 
         // 这里使用旧版的Diffuse + Height + Mix组合, 后面需要改成现代的Albedo + Normal组合
         public void VirtualCaptureMrt(CubemapQuadTree node, out RenderTexture rtDiffuse, out RenderTexture rtHeight, out RenderTexture rtMix) {
-            rtDiffuse = null;
-            rtHeight = null;
-            rtMix = null;
+            matBlit.SetVector("_NodeData", new Vector4(node.u, node.v, node.size, (int)node.face));
+
+            // 设置mrt, 并绘制全屏四边形
+            // todo: gl模式性能没那么好, 需要改成urp的renderer feature模式, 这样才能获得最高性能
+            RenderTexture rtOld = RenderTexture.active;
+
+            Graphics.SetRenderTarget(bufs, rts[0].depthBuffer);
+            matBlit.SetPass(0);
+
+            GL.Clear(false, true, Color.clear);
+
+            GL.PushMatrix();
+            GL.LoadOrtho();
+
+            // Render the full screen quad manually
+            GL.Begin(GL.QUADS);
+            GL.TexCoord2(0.0f, 0.0f); GL.Vertex3(0.0f, 0.0f, 0.1f);
+            GL.TexCoord2(1.0f, 0.0f); GL.Vertex3(1.0f, 0.0f, 0.1f);
+            GL.TexCoord2(1.0f, 1.0f); GL.Vertex3(1.0f, 1.0f, 0.1f);
+            GL.TexCoord2(0.0f, 1.0f); GL.Vertex3(0.0f, 1.0f, 0.1f);
+            GL.End();
+
+            GL.PopMatrix();
+
+            RenderTexture.active = rtOld;
+
+            rtDiffuse = rts[0];
+            rtHeight = rts[1];
+            rtMix = rts[2];
+
+            rtDiffuse.GenerateMips();
+            rtHeight.GenerateMips();
+            rtMix.GenerateMips();
         }
 
         // ---- 私有成员函数 ----

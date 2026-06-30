@@ -124,7 +124,7 @@ namespace IcoSphere {
             for (int mip = 0; mip < 4; ++mip) {
                 Graphics.CopyTexture(rtDiffuse, 0, mip, rtArrDiffuse, idx, mip);
                 Graphics.CopyTexture(rtHeight, 0, mip, rtArrHeight, idx, mip);
-                Graphics.CopyTexture(rtHeight, 0, mip, rtArrMix, idx, mip);
+                Graphics.CopyTexture(rtMix, 0, mip, rtArrMix, idx, mip);
             }
 
             // 通过ComputeShader更新索引贴图

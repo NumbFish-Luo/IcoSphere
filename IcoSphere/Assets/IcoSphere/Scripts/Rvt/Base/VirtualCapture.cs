@@ -81,6 +81,7 @@ namespace IcoSphere {
             ));
 
             // 设置mrt, 并绘制全屏四边形
+            // todo: gl模式性能没那么好, 需要改成urp的renderer feature模式, 这样才能获得最高性能
             RenderTexture rtOld = RenderTexture.active;
 
             Graphics.SetRenderTarget(mrtBufs, clipRTs[0].depthBuffer);
