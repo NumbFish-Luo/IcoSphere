@@ -53,13 +53,10 @@ namespace IcoSphere {
                 bufs[i] = rts[i].colorBuffer;
             }
 
-            // 地形相关Shader数据
-            // todo: 地形图集, 包含多种类型地形的多种类型贴图, 例如泥土贴图 Dirt1_d (diffuse), Dirt1_h (height), Dirt1_m (mix)
-            // todo: 地形混合alpha贴图, 刷地形时控制各个地形的混合值, 或者直接使用 xxx_m (mix) 计算获得混合值
-            // 暂时无需做法线贴图, 后续再添加法线
-
-            // 全局Shader参数设置
-            Shader.SetGlobalInt("_VT_TexSize", vtTexSize);
+            // 全局Shader参数设置, 这里使用旧版的Diffuse + Height + Mix组合, 后面需要改成现代的Albedo + Normal组合
+            Shader.SetGlobalTexture("_VT_AtlasDiffuse", atlasDiffuse);
+            Shader.SetGlobalTexture("_VT_AtlasHeight", atlasHeight);
+            Shader.SetGlobalTexture("_VT_AtlasMix", atlasMix);
         }
 
         // 这里使用旧版的Diffuse + Height + Mix组合, 后面需要改成现代的Albedo + Normal组合

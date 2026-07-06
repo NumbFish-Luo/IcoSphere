@@ -13,6 +13,7 @@ namespace IcoSphere {
         // ---- 可调参数 ----
         [SerializeField] private float radius = 1000.0f;
         [SerializeField] private int rootTexSize = 1024;
+        [SerializeField] private int atlasTexSize = 512;
         [SerializeField] private int vtArrCapacity = 512;
 
         // ---- Debug ----
@@ -48,21 +49,21 @@ namespace IcoSphere {
             idxGenerator.SetTexture(kernelMain, "_Result", rtArrIdx);
 
             // 初始化虚拟相机
-            int vtTexSize = rootTexSize / 2;
-            virtualCapture.Init(vtTexSize);
+            virtualCapture.Init(atlasTexSize);
 
             // 创建纹理数组rt
             // 这里使用旧版的Diffuse + Height + Mix组合
             // 如果使用更加现代的Albedo + Normal组合, 则需要Normal是RenderTextureReadWrite.Linear
-            NewRtArr(ref rtArrDiffuse, vtTexSize, RenderTextureReadWrite.sRGB);
-            NewRtArr(ref rtArrHeight, vtTexSize, RenderTextureReadWrite.sRGB);
-            NewRtArr(ref rtArrMix, vtTexSize, RenderTextureReadWrite.sRGB);
+            NewRtArr(ref rtArrDiffuse, atlasTexSize, RenderTextureReadWrite.sRGB);
+            NewRtArr(ref rtArrHeight, atlasTexSize, RenderTextureReadWrite.sRGB);
+            NewRtArr(ref rtArrMix, atlasTexSize, RenderTextureReadWrite.sRGB);
 
             // 初始化四叉树
             quadTreeManager = new(rootTexSize, radius, vtArrCapacity, OnLoadNodeData);
 
             // 初始化Shader全局参数
             Shader.SetGlobalInt("_VT_RootTexSize", rootTexSize);
+            Shader.SetGlobalInt("_VT_AtlasTexSize", atlasTexSize);
             Shader.SetGlobalTexture("_VT_ArrIdx", rtArrIdx);
 
             // 现代的Albedo + Normal组合

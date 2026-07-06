@@ -19,19 +19,19 @@ Shader "Custom/Rvt/Blit" {
 
             // 纹理数组
             TEXTURE2D_ARRAY(_VT_AlbedoAtlas);
-            SAMPLER(sampler__VT_AlbedoAtlas);
+            SAMPLER(sampler_VT_AlbedoAtlas);
             TEXTURE2D_ARRAY(_VT_NormalAtlas);
-            SAMPLER(sampler__VT_NormalAtlas);
+            SAMPLER(sampler_VT_NormalAtlas);
 
             // 地形控制贴图 (最多4张)
             TEXTURE2D(_Ctrl0);
             TEXTURE2D(_Ctrl1);
             TEXTURE2D(_Ctrl2);
             TEXTURE2D(_Ctrl3);
-            SAMPLER(sampler__Ctrl0);
-            SAMPLER(sampler__Ctrl1);
-            SAMPLER(sampler__Ctrl2);
-            SAMPLER(sampler__Ctrl3);
+            SAMPLER(sampler_Ctrl0);
+            SAMPLER(sampler_Ctrl1);
+            SAMPLER(sampler_Ctrl2);
+            SAMPLER(sampler_Ctrl3);
 
             // 参数
             float4 _VT_BlitOffsetScale; // x, y = offset, z, w = scale
@@ -64,17 +64,17 @@ Shader "Custom/Rvt/Blit" {
                 float2 tiling3 = _VT_TileData[passIdx * 4 + 3].xy;
 
                 // 采样Albedo (使用Sample方法, 自动使用mip0)
-                mixedDiffuse += ctrl.r * _VT_AlbedoAtlas.Sample(sampler__VT_AlbedoAtlas, float3(uv * tiling0, passIdx * 4 + 0));
-                mixedDiffuse += ctrl.g * _VT_AlbedoAtlas.Sample(sampler__VT_AlbedoAtlas, float3(uv * tiling1, passIdx * 4 + 1));
-                mixedDiffuse += ctrl.b * _VT_AlbedoAtlas.Sample(sampler__VT_AlbedoAtlas, float3(uv * tiling2, passIdx * 4 + 2));
-                mixedDiffuse += ctrl.a * _VT_AlbedoAtlas.Sample(sampler__VT_AlbedoAtlas, float3(uv * tiling3, passIdx * 4 + 3));
+                mixedDiffuse += ctrl.r * _VT_AlbedoAtlas.Sample(sampler_VT_AlbedoAtlas, float3(uv * tiling0, passIdx * 4 + 0));
+                mixedDiffuse += ctrl.g * _VT_AlbedoAtlas.Sample(sampler_VT_AlbedoAtlas, float3(uv * tiling1, passIdx * 4 + 1));
+                mixedDiffuse += ctrl.b * _VT_AlbedoAtlas.Sample(sampler_VT_AlbedoAtlas, float3(uv * tiling2, passIdx * 4 + 2));
+                mixedDiffuse += ctrl.a * _VT_AlbedoAtlas.Sample(sampler_VT_AlbedoAtlas, float3(uv * tiling3, passIdx * 4 + 3));
 
                 // 采样Normal
                 const half scale = 1.5;
-                half3 nrm0 = UnpackNormalScale(_VT_NormalAtlas.Sample(sampler__VT_NormalAtlas, float3(uv * tiling0, passIdx * 4 + 0)), scale);
-                half3 nrm1 = UnpackNormalScale(_VT_NormalAtlas.Sample(sampler__VT_NormalAtlas, float3(uv * tiling1, passIdx * 4 + 1)), scale);
-                half3 nrm2 = UnpackNormalScale(_VT_NormalAtlas.Sample(sampler__VT_NormalAtlas, float3(uv * tiling2, passIdx * 4 + 2)), scale);
-                half3 nrm3 = UnpackNormalScale(_VT_NormalAtlas.Sample(sampler__VT_NormalAtlas, float3(uv * tiling3, passIdx * 4 + 3)), scale);
+                half3 nrm0 = UnpackNormalScale(_VT_NormalAtlas.Sample(sampler_VT_NormalAtlas, float3(uv * tiling0, passIdx * 4 + 0)), scale);
+                half3 nrm1 = UnpackNormalScale(_VT_NormalAtlas.Sample(sampler_VT_NormalAtlas, float3(uv * tiling1, passIdx * 4 + 1)), scale);
+                half3 nrm2 = UnpackNormalScale(_VT_NormalAtlas.Sample(sampler_VT_NormalAtlas, float3(uv * tiling2, passIdx * 4 + 2)), scale);
+                half3 nrm3 = UnpackNormalScale(_VT_NormalAtlas.Sample(sampler_VT_NormalAtlas, float3(uv * tiling3, passIdx * 4 + 3)), scale);
 
                 half3 nrm = ctrl.r * nrm0 + ctrl.g * nrm1 + ctrl.b * nrm2 + ctrl.a * nrm3;
                 mixedNormal += nrm;
@@ -90,10 +90,10 @@ Shader "Custom/Rvt/Blit" {
                 float2 uv = input.uv;
 
                 // 采样4张控制贴图, 根据地形实际层数, 最多16层, 每4层一张控制图
-                half4 ctrl0 = SAMPLE_TEXTURE2D(_Ctrl0, sampler__Ctrl0, uv);
-                half4 ctrl1 = SAMPLE_TEXTURE2D(_Ctrl1, sampler__Ctrl1, uv);
-                half4 ctrl2 = SAMPLE_TEXTURE2D(_Ctrl2, sampler__Ctrl2, uv);
-                half4 ctrl3 = SAMPLE_TEXTURE2D(_Ctrl3, sampler__Ctrl3, uv);
+                half4 ctrl0 = SAMPLE_TEXTURE2D(_Ctrl0, sampler_Ctrl0, uv);
+                half4 ctrl1 = SAMPLE_TEXTURE2D(_Ctrl1, sampler_Ctrl1, uv);
+                half4 ctrl2 = SAMPLE_TEXTURE2D(_Ctrl2, sampler_Ctrl2, uv);
+                half4 ctrl3 = SAMPLE_TEXTURE2D(_Ctrl3, sampler_Ctrl3, uv);
 
                 half4 mixedDiffuse = 0;
                 half3 mixedNormal = 0;

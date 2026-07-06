@@ -437,7 +437,7 @@ MeshRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
+  - {fileID: 2100000, guid: 7bcd71fdd3043924fa77e2ee1b7363ae, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -494,7 +494,7 @@ GameObject:
   - component: {fileID: 849687562}
   - component: {fileID: 849687561}
   m_Layer: 5
-  m_Name: Text (Legacy)
+  m_Name: TxtInfo
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -655,6 +655,7 @@ MonoBehaviour:
   idxGenerator: {fileID: 7200000, guid: 1b7195402740d054e95c0c85d00aee04, type: 3}
   radius: 1000
   rootTexSize: 1024
+  atlasTexSize: 512
   vtArrCapacity: 512
   showAllFaces: 1
   selectedFace: 0
@@ -674,7 +675,7 @@ MonoBehaviour:
   atlasDstPath: Assets/IcoSphere/Atlas
   atlasTexSuffix: .png
   atlasTexSize: 1024
-  matBlit: {fileID: 0}
+  matBlit: {fileID: 2100000, guid: 3aff0f800ba3d6845a531ad3269cd2e6, type: 2}
   atlasDiffuse: {fileID: 18700000, guid: dffe31da3327fcb4797801502561ae4e, type: 2}
   atlasHeight: {fileID: 18700000, guid: 0db4b583bcd3a3a44b4c30d07ce033b9, type: 2}
   atlasMix: {fileID: 18700000, guid: a65061ba4249c934f933d703accf50a3, type: 2}
