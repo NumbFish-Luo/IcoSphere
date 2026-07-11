@@ -37,16 +37,19 @@ Shader "Custom/CubemapRvt/Blit" {
 
             struct Varyings {
                 float4 posCs : SV_POSITION;
-                float2 uv : TEXCOORD0;
+                float2 uvBase : TEXCOORD0;
+                float2 uvSub : TEXCOORD1;
             };
 
             Varyings Vert(Attributes input) {
                 Varyings output;
                 output.posCs = TransformObjectToHClip(input.posOs.xyz);
+                float2 uv = input.uv;
+                output.uvBase = uv;
                 // 根据地块偏移和缩放重新计算UV
                 float2 tilling = _NodeData.zz / _VT_RootTexSize;
                 float2 offset = _NodeData.xy / _VT_RootTexSize;
-                output.uv = input.uv * tilling + offset;
+                output.uvSub = uv * tilling + offset;
                 return output;
             }
 
@@ -58,10 +61,10 @@ Shader "Custom/CubemapRvt/Blit" {
             };
 
             FragOutput Frag(Varyings input) {
-                float2 uv = input.uv;
+                float2 uvSub = input.uvSub;
 
                 FragOutput output;
-                output.diffuse = float4(uv.x, uv.y, 0.0, 1.0);
+                output.diffuse = float4(uvSub.x, uvSub.y, 0.0, 1.0);
                 output.height = 0.0;
                 output.mix = 0.0;
                 return output;

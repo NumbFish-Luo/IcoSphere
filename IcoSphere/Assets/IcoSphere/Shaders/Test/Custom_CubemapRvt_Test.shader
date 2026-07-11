@@ -16,6 +16,7 @@ Shader "Custom/CubemapRvt/Test" {
             #pragma vertex Vert
             #pragma fragment Frag
             #pragma target 3.5
+            #pragma require 2darray
 
             #pragma multi_compile _ _MAIN_LIGHT_SHADOWS _MAIN_LIGHT_SHADOWS_CASCADE _MAIN_LIGHT_SHADOWS_SCREEN
             #pragma multi_compile _ _ADDITIONAL_LIGHTS_VERTEX _ADDITIONAL_LIGHTS
@@ -27,7 +28,7 @@ Shader "Custom/CubemapRvt/Test" {
             #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Lighting.hlsl"
 
             // 全局参数
-            TEXTURE2D(_VT_ArrIdx);
+            TEXTURE2D_ARRAY(_VT_ArrIdx);
             SAMPLER(sampler_VT_ArrIdx);
             TEXTURE2D_ARRAY(_VT_ArrDiffuse);
             SAMPLER(sampler_VT_ArrDiffuse);
@@ -74,8 +75,53 @@ Shader "Custom/CubemapRvt/Test" {
                 return output;
             }
 
+            #define FACE_R 0
+            #define FACE_L 1
+            #define FACE_U 2
+            #define FACE_D 3
+            #define FACE_F 4
+            #define FACE_B 5
+            int UvToFace(float2 uv) {
+                // 先确定是底面、侧面还是顶面
+                float v = uv.y;
+                if (v < 0.25) {
+                    return FACE_D;
+                }
+                if (v > 0.75) {
+                    return FACE_U;
+                }
+
+                // 然后确定是侧面的哪一面
+                float u = uv.x;
+                if (u < 0.125) {
+                    return FACE_L;
+                }
+                if (u < 0.375) {
+                    return FACE_B;
+                }
+                if (u < 0.625) {
+                    return FACE_R;
+                }
+                if (u < 0.875) {
+                    return FACE_F;
+                }
+                return FACE_L;
+            }
+
             half4 Frag(Varyings input) : SV_Target {
-                return float4(0.0, 0.0, 0.0, 1.0);
+                float2 uv = input.uv;
+                int face = UvToFace(uv);
+
+                float2 uvFace = uv; // TEST
+                float4 idxData = SAMPLE_TEXTURE2D_ARRAY(_VT_ArrIdx, sampler_VT_ArrIdx, uvFace, face);
+                int idx = (int)idxData.x;
+                float2 offset = idxData.yz;
+                float size = idxData.w;
+
+                float2 uvNode = offset; // TEST
+                float4 diffuse = SAMPLE_TEXTURE2D_ARRAY(_VT_ArrDiffuse, sampler_VT_ArrDiffuse, uvNode, idx);
+
+                return diffuse;
             }
             ENDHLSL
         }
