@@ -40,39 +40,39 @@ Shader "Custom/CubemapRvt/Test" {
             int _VT_AtlasTexSize;
 
             struct Attributes {
-                float4 positionOS : POSITION;
+                float4 posOs : POSITION;
                 float2 uv : TEXCOORD0;
                 float3 normalOS : NORMAL;
-                float4 tangentOS : TANGENT;
+                float4 tanOs : TANGENT;
             };
 
             struct Varyings {
-                float4 positionCS : SV_POSITION;
+                float4 posCs : SV_POSITION;
                 float2 uv : TEXCOORD0;
-                float3 positionWS : TEXCOORD1;
+                float3 posWs : TEXCOORD1;
                 float3 normalWS : TEXCOORD2;
-                float4 tangentWS : TEXCOORD3; // xyz = tangent, w = sign
+                float4 tanWs : TEXCOORD3; // xyz = tangent, w = sign
                 #if defined(_MAIN_LIGHT_SHADOWS)
                     float4 shadowCoord : TEXCOORD4;
                 #endif
                 float fogFactor : TEXCOORD5;
             };
 
-            Varyings Vert(Attributes input) {
-                Varyings output;
-                output.positionCS = TransformObjectToHClip(input.positionOS.xyz);
-                output.uv = input.uv;
+            Varyings Vert(Attributes i) {
+                Varyings o;
+                o.posCs = TransformObjectToHClip(i.posOs.xyz);
+                o.uv = i.uv;
 
-                output.positionWS = TransformObjectToWorld(input.positionOS.xyz);
-                output.normalWS = TransformObjectToWorldNormal(input.normalOS);
-                output.tangentWS = float4(TransformObjectToWorldDir(input.tangentOS.xyz), input.tangentOS.w);
+                o.posWs = TransformObjectToWorld(i.posOs.xyz);
+                o.normalWS = TransformObjectToWorldNormal(i.normalOS);
+                o.tanWs = float4(TransformObjectToWorldDir(i.tanOs.xyz), i.tanOs.w);
 
                 #if defined(_MAIN_LIGHT_SHADOWS)
-                    output.shadowCoord = TransformWorldToShadowCoord(output.positionWS);
+                    o.shadowCoord = TransformWorldToShadowCoord(o.posWs);
                 #endif
 
-                output.fogFactor = ComputeFogFactor(output.positionCS.z);
-                return output;
+                o.fogFactor = ComputeFogFactor(o.posCs.z);
+                return o;
             }
 
             #define FACE_R 0
@@ -81,38 +81,50 @@ Shader "Custom/CubemapRvt/Test" {
             #define FACE_D 3
             #define FACE_F 4
             #define FACE_B 5
-            int UvToFace(float2 uv) {
-                // 先确定是底面、侧面还是顶面
-                float v = uv.y;
-                if (v < 0.25) {
-                    return FACE_D;
-                }
-                if (v > 0.75) {
-                    return FACE_U;
-                }
 
-                // 然后确定是侧面的哪一面
-                float u = uv.x;
-                if (u < 0.125) {
-                    return FACE_L;
+            // 球体坐标转立方体坐标
+            void SphereToCube(float3 ps, out float3 pc, out int face, out float2 uv) {
+                float absX = abs(ps.x);
+                float absY = abs(ps.y);
+                float absZ = abs(ps.z);
+                float m = max(max(absX, absY), absZ);
+                pc = ps / m;
+                if (absX >= absY && absX >= absZ) {
+                    if (ps.x > 0.0) {
+                        face = FACE_R;
+                        uv = float2(-ps.z, -ps.y);
+                    } else {
+                        face = FACE_L;
+                        uv = float2(+ps.z, -ps.y);
+                    }
+                } else if (absY >= absX && absY >= absZ) {
+                    if (ps.y > 0.0) {
+                        face = FACE_U;
+                        uv = float2(+ps.x, +ps.z);
+                    } else {
+                        face = FACE_D;
+                        uv = float2(+ps.x, -ps.z);
+                    }
+                } else {
+                    if (ps.z > 0.0) {
+                        face = FACE_F;
+                        uv = float2(+ps.x, -ps.y);
+                    } else {
+                        face = FACE_B;
+                        uv = float2(-ps.x, -ps.y);
+                    }
                 }
-                if (u < 0.375) {
-                    return FACE_B;
-                }
-                if (u < 0.625) {
-                    return FACE_R;
-                }
-                if (u < 0.875) {
-                    return FACE_F;
-                }
-                return FACE_L;
+                uv = uv / m * 0.5 + 0.5;
             }
 
-            half4 Frag(Varyings input) : SV_Target {
-                float2 uv = input.uv;
-                int face = UvToFace(uv);
+            half4 Frag(Varyings i) : SV_Target {
+                float2 uv = i.uv;
+                float3 ps = normalize(i.posWs);
+                float3 pc = 0.0;
+                int face = 0;
+                float2 uvFace = 0.0;
+                SphereToCube(ps, pc, face, uvFace);
 
-                float2 uvFace = uv; // TEST
                 float4 idxData = SAMPLE_TEXTURE2D_ARRAY(_VT_ArrIdx, sampler_VT_ArrIdx, uvFace, face);
                 int idx = (int)idxData.x;
                 float2 offset = idxData.yz;
