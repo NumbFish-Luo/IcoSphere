@@ -132,8 +132,6 @@ namespace IcoSphere {
             Vector4 val = new(idx, u, v, s);
             idxGenerator.SetVector("_Val", val);
             idxGenerator.SetInt("_Face", f);
-            idxGenerator.SetInt("_OffsetU", u);
-            idxGenerator.SetInt("_OffsetV", v);
             idxGenerator.Dispatch(kernelMain, s, s, 1); // 传入(s * s * 1)个线程
         }
 

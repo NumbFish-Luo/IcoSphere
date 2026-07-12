@@ -125,13 +125,13 @@ Shader "Custom/CubemapRvt/Test" {
                 float2 uvFace = 0.0;
                 SphereToCube(ps, pc, face, uvFace);
 
-                float4 idxData = SAMPLE_TEXTURE2D_ARRAY(_VT_ArrIdx, sampler_VT_ArrIdx, uvFace, face);
-                int idx = (int)idxData.x;
-                float2 offset = idxData.yz;
-                float size = idxData.w;
+                // x: node.phyTexIdx, y: node.u, z: node.v, w: node.size
+                int4 idxData = (int4)SAMPLE_TEXTURE2D_ARRAY(_VT_ArrIdx, sampler_VT_ArrIdx, uvFace, face);
 
-                float2 uvNode = offset; // TEST
-                float4 diffuse = SAMPLE_TEXTURE2D_ARRAY(_VT_ArrDiffuse, sampler_VT_ArrDiffuse, uvNode, idx);
+                float2 tilling = idxData.w / _VT_RootTexSize;
+                float2 offset = idxData.yz / _VT_RootTexSize;
+                float2 uvNode = uvFace * tilling + offset;
+                float4 diffuse = SAMPLE_TEXTURE2D_ARRAY(_VT_ArrDiffuse, sampler_VT_ArrDiffuse, uvNode, idxData.x);
 
                 return diffuse;
             }
